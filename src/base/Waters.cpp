@@ -2642,15 +2642,27 @@ void Waters::translateAndWriteWatersToFile(std::string name, const vector3 * pCe
         count++;
     }
 
+    // 9999 is largest number for resid
+    int index = 0;
+    std::string chains[3] ={ "X", "Y", "Z"};
+    std::string chainID = chains[index];
+
     for(unsigned int i=totalwaters; i < hydration.size(); i++){
         Coords * pCoord = &hydration[i];
         std::string resid = std::to_string(count);
-        fprintf(pFile, "%-6s%5i %4s %3s %1s%4s    %8.3f%8.3f%8.3f  1.00100.00\n", "ATOM", count, " O  ", "HOH", "Y",
+        fprintf(pFile, "%-6s%5i %4s %3s %1s%4s    %8.3f%8.3f%8.3f  1.00100.00\n", "ATOM", count, " O  ", "HOH", chainID.c_str(),
                 resid.c_str(),
                 pCoord->x + pCenVec->x,
                 pCoord->y + pCenVec->y,
                 pCoord->z + pCenVec->z);
         count++;
+
+        if (count % 9999 == 0 ){ // reset count and use new chain ID
+            index += 1;
+            chainID = chains[index];
+            count = 1;
+        }
+
     }
 
     fclose(pFile);

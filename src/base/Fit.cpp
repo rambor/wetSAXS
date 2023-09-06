@@ -812,7 +812,7 @@ void Fit::writeBestModelToFile(
     fprintf(pFile, "# REMARK         DMAX :: %.1f Angstroms\n", model.getDmax());
     fprintf(pFile, "# REMARK     RESIDUES :: %i \n", model.getPDBModel().getTotalResidues());
     fprintf(pFile, "# REMARK        ATOMS :: %i \n", model.getPDBModel().getTotalCoordinates());
-    fprintf(pFile, "# REMARK (non-H) MASS :: %.1f \n", model.getPDBModel().calculateMW());
+    fprintf(pFile, "# REMARK (non-H) MASS :: %.1f \n", model.getPDBModel().getMW());
     fprintf(pFile, "# REMARK       VOLUME :: %.1f \n", model.getPDBModel().getVolume());
     fprintf(pFile, "# REMARK    COLUMNS 1 :: %s \n", "index");
     fprintf(pFile, "# REMARK    COLUMNS 2 :: %s \n", "momentum transfer (Angstroms^-1)");
@@ -982,6 +982,7 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
         return lhs.score < rhs.score;
     });
 
+    std::cout << "_______________________________________________________________________" << std::endl;
     std::cout << " SORTED SCORES " << std::endl;
     std::cout << "   SCORE ::   CHI   ::   DW  ::   CX  ::    B" << std::endl;
 
@@ -991,6 +992,7 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
         std::cout << buffer << std::endl;
     }
 
+    std::cout << "_______________________________________________________________________" << std::endl;
     // median
     int middle = (totalRounds-1)/2;
 
@@ -1002,9 +1004,12 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
     bestBfactor = res.getBfactor();
     i_best = res.getICalc();
 
+    SASTOOLS_UTILS_H::logger("STATUS", "Writing median best-fit model");
     writeBestChiFreeModel(model, res.getSelectedIndices(), iofqdata, totalRounds);
 
     // calculate over all input data using best fitting median parameters
+    SASTOOLS_UTILS_H::logger("STATUS", "FINAL FIT TO ALL DATA");
+
     iofqdata.setAllDataToWorkingSet();
     std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
 
@@ -1013,7 +1018,6 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
     model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
 
     fitFixedCxandBFactor(iofqdata, model, waterModel, bestBfactor, bestCx);
-
     writeBestModelToFile(qvalues, model, norm_aPWs.data(), norm_aCs.data(), aXW_cross_term.data());
 
 }
@@ -1081,7 +1085,7 @@ void Fit::writeBestChiFreeModel(AtomisticModel &model,
     fprintf(pFile, "# REMARK         DMAX :: %.1f Angstroms\n", model.getDmax());
     fprintf(pFile, "# REMARK     RESIDUES :: %i \n", model.getPDBModel().getTotalResidues());
     fprintf(pFile, "# REMARK        ATOMS :: %i \n", model.getPDBModel().getTotalCoordinates());
-    fprintf(pFile, "# REMARK (non-H) MASS :: %.1f \n", model.getPDBModel().calculateMW());
+    fprintf(pFile, "# REMARK (non-H) MASS :: %.1f \n", model.getPDBModel().getMW());
     fprintf(pFile, "# REMARK       VOLUME :: %.1f \n", model.getPDBModel().getVolume());
     fprintf(pFile, "# REMARK    COLUMNS 1 :: %s \n", "index");
     fprintf(pFile, "# REMARK    COLUMNS 2 :: %s \n", "momentum transfer (Angstroms^-1)");

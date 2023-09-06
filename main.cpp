@@ -267,6 +267,7 @@ int main(int argc, const char *const *argv) {
                     Fit fitting = Fit(lmax, divisions,cxlow,cxhi, upperB);
 
                     if (noChiFree){
+
                         SASTOOLS_UTILS_H::logger("", "Grid Search of B-factor and Cx");
                         fitting.search(iofqdata, model, waters);
 
