@@ -117,6 +117,8 @@ void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
                                                 std::vector < float > & qvalues,
                                                 bool recalculate){
 
+    this->lmax = lmax;
+
     if (recalculate){
 
         sbj.recalculate(totalqvalues, qvalues, &rvalues);
