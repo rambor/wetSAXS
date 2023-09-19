@@ -33,7 +33,7 @@ class Fit {
 
     unsigned int lmax, total_cx;
     float lowcx, highcx;
-    float deltaCX, deltaCW;
+    float deltaCX;
     float upper_Bfactor;
 
     float bestScore;
@@ -142,6 +142,16 @@ public:
                                unsigned int totalRNDS);
 
     float * getAP() { return norm_aPWs.data(); }
+
+    std::string getScoreText(std::string filename){
+
+        char buffer [50];
+
+        sprintf (buffer, "%8.3f %6.3f %5.3f %5.3f %5.1f %s\n", bestScore, bestChi,
+                 bestDW, bestCx, bestBfactor, filename.c_str()); // change the number to a string for name
+
+        return buffer;
+    }
 };
 
 

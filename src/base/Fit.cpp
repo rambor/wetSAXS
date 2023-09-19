@@ -779,15 +779,16 @@ void Fit::writeBestModelToFile(
 
     char buffer [50];
 
-    sprintf (buffer, "B_%.2f", bestBfactor); // change the number to a string for name
-    std::string sbf = buffer;
-    std::replace(sbf.begin(), sbf.end(), '.', 'p');
-
-    sprintf (buffer, "CX_%.2f", bestCx); // change the number to a string for name
-    std::string cxs = buffer;
-    std::replace(cxs.begin(), cxs.end(), '.', 'p');
-
-    std::string nameOf = name + "_" + cxs + "_" + sbf + "_fit.dat";
+//    sprintf (buffer, "B_%.2f", bestBfactor); // change the number to a string for name
+//    std::string sbf = buffer;
+//    std::replace(sbf.begin(), sbf.end(), '.', 'p');
+//
+//    sprintf (buffer, "CX_%.2f", bestCx); // change the number to a string for name
+//    std::string cxs = buffer;
+//    std::replace(cxs.begin(), cxs.end(), '.', 'p');
+//
+//    std::string nameOf = name + "_" + cxs + "_" + sbf + "_fit.dat";
+    std::string nameOf = name + "_best_fit.dat";
 
     logger("OUTPUT FILE", nameOf);
 
@@ -955,25 +956,23 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
 
     std::vector<Result> results;
 
-
     if (!(totalRounds & 1)){
         totalRounds+=1;
     }
 
-
     for (unsigned int rnd=0; rnd<totalRounds; rnd++){
+
         SASTOOLS_UTILS_H::logger("CHI-free round", formatNumber(rnd+1));
 
-        this->search(iofqdata, model, waterModel);
-//
-        results.emplace_back(Result(bestScore, bestScaleCoef, bestCx, bestBfactor, bestDW, bestChi, i_best, iofqdata.getSelectedIndices()));
-
         iofqdata.makeWorkingSet();
-
         std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
 
-        waterModel.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, true);
-        model.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, true);
+        waterModel.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, (rnd > 1));
+        model.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, (rnd > 1));
+
+        this->search(iofqdata, model, waterModel);
+        results.emplace_back(Result(bestScore, bestScaleCoef, bestCx, bestBfactor, bestDW, bestChi, i_best, iofqdata.getSelectedIndices()));
+
     }
 
     // now sort and take the median of Results
@@ -1011,12 +1010,13 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
     SASTOOLS_UTILS_H::logger("STATUS", "FINAL FIT TO ALL DATA");
 
     iofqdata.setAllDataToWorkingSet();
-    std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
 
-    // recalculate Partials for the initial models
+    std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
+//
+//    // recalculate Partials for the initial models
     waterModel.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
     model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
-
+//
     fitFixedCxandBFactor(iofqdata, model, waterModel, bestBfactor, bestCx);
     writeBestModelToFile(qvalues, model, norm_aPWs.data(), norm_aCs.data(), aXW_cross_term.data());
 
