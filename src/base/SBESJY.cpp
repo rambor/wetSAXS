@@ -135,7 +135,7 @@ SBESJY::SBESJY(float x, int lmax) : qr(x), lmax(lmax) {
 
         if (nfp == limit) { // no convergence
             // throw exception
-            throw std::invalid_argument("Invalid argument, LIMIT EXCEEDED");
+            throw std::invalid_argument("Invalid argument, LIMIT EXCEEDED " + std::to_string(qr) + " lmax " + std::to_string(lmax));
         }
 
         double error = ACCUR * sqrt(double(nfp)); // error estimate
