@@ -2062,7 +2062,7 @@ void Waters::hydrateAtomisticModel(AtomisticModel & aModel) {
 
     for (unsigned int i=1; i<numAtoms; i++){ // find block of atoms that belong to same RESID
 
-        if (currentID == pResIDs[i] && currentRes.compare(pResidues[i]) == 0){ // keep adding until resid and resname changes
+        if (currentID == pResIDs[i] && currentRes == pResidues[i] && i != (numAtoms-1)){ // keep adding until resid and resname changes
 
             atomsInResidue++;
 
@@ -2076,6 +2076,10 @@ void Waters::hydrateAtomisticModel(AtomisticModel & aModel) {
             atomsInResidue = 1;
             startHere = i;
         }
+
+//        if (i == (numAtoms-1)){
+//            hydrateResidueDirect(currentRes, currentID, atomsInResidue, startHere, atomType, xvalue, yvalue, zvalue);
+//        }
     }
 
     std::string residue_index;
