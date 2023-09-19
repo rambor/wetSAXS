@@ -30,7 +30,7 @@ SphericalBessels::SphericalBessels(){
     //besselalq = nullptr;
 }
 
-SphericalBessels::SphericalBessels(int lmax, int qvaluesSize, int numatoms, std::vector < float > & qvalues, std::vector < float > * rvalues) :
+SphericalBessels::SphericalBessels(unsigned int lmax, unsigned int qvaluesSize, unsigned int numatoms, std::vector < float > & qvalues, std::vector < float > * rvalues) :
     lmax(lmax),
     qvaluesSize(qvaluesSize),
     numAtoms(numatoms) {
@@ -108,7 +108,7 @@ SphericalBessels::SphericalBessels(int lmax, int qvaluesSize, int numatoms, std:
  * @param qvalues
  * @param coords
  */
-SphericalBessels::SphericalBessels(int lmax, int qvaluesSize, int numAtoms, std::vector < float > & qvalues, std::vector<Coords> & coords) : lmax(lmax), qvaluesSize(qvaluesSize), numAtoms(numAtoms) {
+SphericalBessels::SphericalBessels(unsigned int lmax, unsigned int qvaluesSize, unsigned int numAtoms, std::vector < float > & qvalues, std::vector<Coords> & coords) : lmax(lmax), qvaluesSize(qvaluesSize), numAtoms(numAtoms) {
 
     bessel_size = qvaluesSize*(lmax+1)*numAtoms;
 
@@ -138,7 +138,6 @@ void SphericalBessels::calculate(std::vector<float> & qr){
     //besselalq = (float *)_aligned_malloc(sizeof(float)*bessel_size + 16, 16); // 16 byte aligned
 
     std::clock_t startTime = std::clock();
-
     for(int q = 0; q < qvaluesSize; q++) {
 
         int start_at = q*numAtoms;

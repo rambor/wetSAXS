@@ -40,10 +40,10 @@ class SphericalBessels {
 
 private:
 
-    int bessel_size;
-    int lmax;
-    int qvaluesSize;
-    int numAtoms;
+    unsigned int bessel_size;
+    unsigned int lmax;
+    unsigned int qvaluesSize;
+    unsigned int numAtoms;
 
     //float * besselalq; // aligned memory
 
@@ -53,8 +53,8 @@ private:
 public:
     SphericalBessels();
 
-    SphericalBessels(int bs, int qs, int numatoms, std::vector < float > & qvalues, std::vector < float > * rvalues);
-    SphericalBessels(int bs, int qs, int na, std::vector < float > & qvalues, std::vector<Coords> & coords);
+    SphericalBessels(unsigned int bs, unsigned int qs, unsigned int numatoms, std::vector < float > & qvalues, std::vector < float > * rvalues);
+    SphericalBessels(unsigned int bs, unsigned int qs, unsigned int na, std::vector < float > & qvalues, std::vector<Coords> & coords);
 
     ~SphericalBessels(){
         //_aligned_free(besselalq);
