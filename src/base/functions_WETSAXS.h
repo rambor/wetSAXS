@@ -26,6 +26,10 @@
 
 #include <cmath>
 #include <string>
+#include <iostream>
+#include <fstream>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string.hpp>
 
 namespace functions_WETSAXS {
     static float coeffs[][11] =
@@ -138,6 +142,7 @@ namespace functions_WETSAXS {
 
     float asf ( int atomicNumber, float q);
     float asf_at_q_zero(int atomicNumber);
+
 };
 
 
