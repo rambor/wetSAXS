@@ -48,17 +48,17 @@ int main(int argc, const char *const *argv) {
 
     float cxlow = 0.8, cxhi = 1.5, dmax=0.0f, qmin = 0.001, qmax = 0.41;
 
-    float bfactor = 0.98, cx = 1.108, upperB=87;
+    float bfactor = 0.98, cx = 1.108, upperB=157;
 
     bool convertToAngstrom = false, forceRNA = false, keepWaters = false, noChiFree = false, singleFit = false,
-    writeWaters = false, invacuo=false;
+    writeWaters = false, invacuo=false, mixture=false, ensemble=false, background=false;
 
     int divisions = 101;
 
     int ns = 237, rounds = 5;
 
-    std::string datFile;
-    std::vector<std::string> file_names;
+    std::string datFile, atomFile;
+    std::vector<std::string> filenames;
 
     boost::program_options::options_description generic("\n Usage: wetSAXS myPDBFile.pdb");
 
@@ -69,6 +69,7 @@ int main(int argc, const char *const *argv) {
             ("toNM", po::bool_switch(&convertToAngstrom), "Reduce bead radius defining the lattice")
             ("bfactor,b", po::value<float>(&bfactor), "Use to specify fixed B-factor for simulation or fitting (default: 0.98)")
             ("contrast,x", po::value<float>(&cx), "Excluded volume contrast adjustment (default: 1.108)")
+            (",g", po::bool_switch(&background), "Include constant background in fit (default: false)")
             ("cxlo", po::value<float>(&cxlow),"lower bound for excluded volume adjustment")
             ("cxhi", po::value<float>(&cxhi),"upper bound for excluded volume adjustment")
             ("upperB", po::value<float>(&upperB),"upper bound for B-factor during search")
@@ -82,8 +83,11 @@ int main(int argc, const char *const *argv) {
             ("keepWaters", po::bool_switch(&keepWaters), "keep modeled waters in PDB")
             ("invacuo", po::bool_switch(&invacuo), "calculate in vacuo scattering profile")
             ("noChiFree", po::bool_switch(&noChiFree), "Fit all the data without subsampling")
-            (",w", po::bool_switch(&writeWaters), "Fit all the data without subsampling")
+            (",w", po::bool_switch(&writeWaters), "write waters to file")
             ("rounds,r", po::value<int>(&rounds), "Number of rounds for chi-free fitting - odd number")
+            (",m", po::bool_switch(&mixture), "mixture model")
+            (",e", po::bool_switch(&ensemble), "Ensemble fitting")
+            ("atomFile,t", po::value<std::string>(&atomFile), "form-factor file")
             ;
 
 //    po::positional_options_description positionalOptions;
@@ -91,7 +95,7 @@ int main(int argc, const char *const *argv) {
 
     boost::program_options::options_description hidden("Hidden options");
     hidden.add_options()
-            (FILES_KEY.c_str(), po::value(&file_names)->required(), "list of PDB files");
+            (FILES_KEY.c_str(), po::value(&filenames)->required(), "list of PDB files");
 
     po::options_description cmdline_options;
     cmdline_options.add(generic).add(hidden);
@@ -128,6 +132,7 @@ int main(int argc, const char *const *argv) {
             convertToAngstrom = true;
         }
 
+
         if (vm.count("bfactor") || vm.count("contrast")){
 
             if (bfactor < 0){
@@ -142,8 +147,6 @@ int main(int argc, const char *const *argv) {
 
             std::cout << "B-Factor " << bfactor << std::endl;
             std::cout << "Contrast " << cx << std::endl;
-
-
         }
 
         if (datFile.empty()){ // simulate using specified cx anc bf values
@@ -155,8 +158,7 @@ int main(int argc, const char *const *argv) {
                 qvalues.push_back((float)(i+1)*delta);
             }
 
-
-            for(const std::string& filename : file_names){
+            for(const std::string& filename : filenames){
 
                 SASTOOLS_UTILS_H::logger("FITTING MODEL FILE",filename);
                 AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
@@ -193,7 +195,6 @@ int main(int argc, const char *const *argv) {
 
                         // translate water model back to original input coordinates
                         waters.translateAndWriteWatersToFile(name + "_hydration_model", model.getPDBModel().getCenteringVector());
-
                     }
 
                     // create water model
@@ -205,7 +206,7 @@ int main(int argc, const char *const *argv) {
 
             return 0;
 
-        } else { // fit
+        } else { // fit data
 
             iofqdata = IofQData(datFile, convertToAngstrom);
             iofqdata.extractData(); // assume dmax is not set as data from other facilities will not be compatible with Scatter format
@@ -219,34 +220,55 @@ int main(int argc, const char *const *argv) {
                 dmax = iofqdata.getDmax();
             }
 
+            // need to use qmax if specified otherwise stick to IofQ qmax
+            if (vm.count("qmax") > 0){
+                qmax = vm["qmax"].as<float>() < iofqdata.getQmax() ? vm["qmax"].as<float>() : iofqdata.getQmax();
+            }
+
+            // truncate q-values of iofqdata to specified qmax
+            if (qmax < iofqdata.getQmax()){
+                iofqdata.truncateToQmax(qmax);
+            }
+
+
             unsigned lmax = (unsigned int)((qmax*dmax)/SIMDE_MATH_PI) + 1;
             SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
 
-
+            // check that the cx and bfactors are sensible
             try {
                 checkUpperB(upperB);
                 checkCXRange(cxlow, cxhi);
                 checkCX(cx);
             } catch (std::string & fl) {
-                std::cout << fl << std::endl;
+                std::cerr << fl << std::endl;
                 return ERROR_IN_COMMAND_LINE;
             }
 
-
-
             std::vector<std::string> logfileOutput;
+
             // chi free fitting is default
             if (!noChiFree && !vm.count("upperB") && !vm.count("contrast")){
 
-                Fit fitting = Fit(lmax, divisions,cxlow,cxhi, upperB);
+                Fit fitting = Fit(lmax, divisions, cxlow, cxhi, upperB);
 
-                for(const std::string& filename : file_names){
+                for(const std::string& filename : filenames){
 
                     try{
                         AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
 
                         if (model.getPDBModel().getTotalResidues() < 1){
                             throw (filename);
+                        }
+
+                        // if atomFile present load the atom descriptors
+                        if (vm.count("atomFile")){
+                            if (!model.getPDBModel().validateATOMTYPESFileFormat(atomFile)){
+                                std::cerr << "ERROR: check input --atomFile : "  << atomFile << std::endl;
+                                exit(0);
+                            }
+
+                            model.getPDBModel().updateAtomDescriptions(atomFile);
+                            exit(0);
                         }
 
                         SASTOOLS_UTILS_H::logger("Model DMAX", std::to_string(model.getDmax()));
@@ -256,13 +278,13 @@ int main(int argc, const char *const *argv) {
                         waters.hydrateAtomisticModel(model); // add waters to PDB
                         waters.createSphericalCoordinateOfHydration();
 
+                        fitting.chiFreeSearch(rounds, iofqdata, model, waters);
+
                         if (writeWaters){
                             std::string name = model.getPDBModel().getFileStemName();
                             model.getPDBModel().getCenteringVector();
                             waters.translateAndWriteWatersToFile(name + "_hydration_model", model.getPDBModel().getCenteringVector());
                         }
-
-                        fitting.chiFreeSearch(rounds, iofqdata, model, waters);
 
                         logfileOutput.emplace_back(fitting.getScoreText(model.getPDBModel().getFileStemName()));
 
@@ -278,7 +300,7 @@ int main(int argc, const char *const *argv) {
                 // can fit with specified cx and b-factor or do a search
                 // if fitting multiple PDB files to dataset with no chiFree, use same working set
 
-                for(const std::string& filename : file_names){
+                for(const std::string& filename : filenames){
 
                     SASTOOLS_UTILS_H::logger("FITTING MODEL FILE",filename);
 
@@ -311,7 +333,7 @@ int main(int argc, const char *const *argv) {
 
                         if (!vm.count("upperB") && !vm.count("contrast")){ // no Chi-free fitting single working set only
 
-                            Fit fitting = Fit(lmax, divisions,cxlow,cxhi, upperB);
+                            Fit fitting = Fit(lmax, divisions, cxlow, cxhi, upperB);
                             SASTOOLS_UTILS_H::logger("", "Grid Search of B-factor and Cx");
                             fitting.search(iofqdata, model, waters);
                             // append a summary file with the best fitted parameters so a user could
@@ -342,7 +364,6 @@ int main(int argc, const char *const *argv) {
                     }
 
                 }
-
             }
 
             // write logfile
@@ -363,11 +384,15 @@ int main(int argc, const char *const *argv) {
         }
 
     } catch (boost::program_options::error& e){
+
         std::cerr << "ERROR: " << e.what() << std::endl;
         return ERROR_IN_COMMAND_LINE;
+
     } catch (const std::invalid_argument& e){
+
         std::cerr << "ERROR: " << e.what() << std::endl;
         std::cerr<<"Type "<<typeid(e).name()<<std::endl;
+
     }
 
     if (vm.count("help") || !vm.count("pdb-files")) {
