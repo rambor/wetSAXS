@@ -24,6 +24,7 @@ list(APPEND SOURCES
         functions_WETSAXS.cpp
         Fit.cpp
         SBESJY.cpp
+        Ensemble.cpp
         )
 
 list(APPEND HEADERS
@@ -35,6 +36,7 @@ list(APPEND HEADERS
         Fit.h
         Result.h
         SBESJY.h
+        Ensemble.h
         )
 
 add_library(${CMAKE_PROJECT_NAME}_lib STATIC ${SOURCES} ${HEADERS})
