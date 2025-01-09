@@ -38,6 +38,14 @@ SBESJY::SBESJY(float x, int lmax) : qr(x), lmax(lmax) {
     jarray.resize(lmax+1);
     jparray.resize(lmax+1);
 
+    if (qr == 0){
+        jarray[0] = 1;
+        for(unsigned int i=1; i<jarray.size(); i++){
+            jarray[i] = 0;
+        }
+        return;
+    }
+
     const double ACCUR = 1e-14;
 
     double invqr = 1.0/qr;
@@ -174,12 +182,6 @@ SBESJY::SBESJY(float x, int lmax) : qr(x), lmax(lmax) {
             *pJPArray *= omega;
         }
 
-
-
-
-
-
     } // end of the continued fraction
-
 
 }

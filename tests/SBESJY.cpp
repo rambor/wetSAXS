@@ -47,7 +47,7 @@ TEST_F(SBESJYTests, initializationTest){
 
     double third = -1.0/3.0;
 
-    std::cout << fabs(third) << " ---> " << abs(third) << std::endl;
+
 
     for(auto & qval : qvalues){
 
