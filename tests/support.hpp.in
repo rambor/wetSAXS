@@ -26,3 +26,4 @@
 #include "gtest/gtest.h"
 
 #define fixture(filename) "@CMAKE_SOURCE_DIR@/tests/fixtures/"#filename""
+#define test_dir() "@CMAKE_SOURCE_DIR@/tests/fixtures/"
