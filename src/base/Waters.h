@@ -71,7 +71,6 @@ public:
 
     void extractWatersFromAtomisticModel(AtomisticModel & model);
 
-
     void createBackbonesAndSideChains();
 
     void hydrateResidueDirect(std::string residue, int resid, int atomsInResidue, unsigned int startAt,

@@ -2100,6 +2100,7 @@ void Waters::hydrateAtomisticModel(AtomisticModel & aModel) {
                 pW->x = 0.5f*(pK->x + vecW.x);
                 pW->y = 0.5f*(pK->y + vecW.y);
                 pW->z = 0.5f*(pK->z + vecW.z);
+
                 vecW = vector3(pW->x, pW->y, pW->z);
                 std::iter_swap(hydration.begin()+k, hydration.begin()+(totalwaters-1));
                 //std::cout << "Averaging water position " << std::endl;
@@ -2829,7 +2830,7 @@ void Waters::calculatePartialAmplitudes(unsigned int lmax,
         q_index++;
     }
 
-    double    runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
+    double runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
     logger("Total TIME (Waters)", formatNumber((float)runtime,8));
 
 }
