@@ -87,8 +87,9 @@ void SphericalHarmonics::populateSHETable( const float * pThetas,  const float *
             for (int i=0 ; i < numAtoms; i++) {
                 // includes negative angles for m < 0
                 auto complex = boost::math::spherical_harmonic(l, m, pThetas[i], pPhis[i]);
-                ptrR[ index_lm ] = (float) (complex.real());//(float) (cosp * result);
-                ptrI[ index_lm ] = (float) (complex.imag());//(float) (sinp * result);
+
+                ptrR[ index_lm ] = (float) (complex.real()); //(float) (cosp * result);
+                ptrI[ index_lm ] = (float) (complex.imag()); //(float) (sinp * result);
                 index_lm++;
             }
         }
