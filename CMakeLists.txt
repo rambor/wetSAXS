@@ -4,7 +4,7 @@ project(wetSAXS)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS_Release "${CMAKE_CXX_FLAGS_RELEASE} -Wall -g1 -DNDEBUG -O3 ")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native -pthread -ffast-math -fopenmp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -ffast-math -fopenmp")
 MESSAGE("** SYSTEM : ${CMAKE_SYSTEM_NAME}")
 
 SET (SASTOOLS_INCLUDE_DIRS $ENV{HOME}/usr/local/include)
@@ -46,14 +46,18 @@ SET(SOURCES)
 SET(HEADERS)
 
 add_subdirectory(src/base)
-
 include_directories(src/base)
+
+add_subdirectory(src/fsrc)
+include_directories(src/fsrc)
+target_include_directories(nnls_lib PUBLIC src/fsrc)
+
 add_executable(wetSAXS main.cpp)
 
 target_link_libraries(wetSAXS
         PUBLIC
         ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
-        ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib
+        ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib
         )
 
 add_subdirectory(lib) # testing directory

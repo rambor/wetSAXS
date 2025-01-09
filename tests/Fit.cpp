@@ -43,7 +43,7 @@ public:
 
 TEST_F(FitTests, calculatePartials){
 
-    AtomisticModel md = AtomisticModel(fixture(bsa.pdb), false, false);
+    AtomisticModel md = AtomisticModel(fixture(bsa_md_1_7.pdb), false, false);
 
     iofqdata.extractData(); // assume dmax is not set as data from other facilities will not be compatible with Scatter format
     iofqdata.setDmax(md.getDmax());

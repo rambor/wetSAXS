@@ -37,7 +37,7 @@ class Fit {
     float upper_Bfactor;
 
     float bestScore;
-    float bestBfactor, bestCx, bestScaleCoef, bestDW, bestChi;
+    float bestBfactor, bestCx, bestScaleCoef, bestDW, bestChi, bestBackground;
     const float inv16Pi2 = 1.0/(16.0*M_PI_2);
 
     std::vector<float> norm_aPs;
@@ -96,6 +96,15 @@ public:
                                               float b_factor,
                                               float *pIcalc);
 
+    float calculateIofQfromModelWithBackground(unsigned int totalInWorkingSet,
+                                              const float *pQ,
+                                              const float *pApw,
+                                              const float *pAc,
+                                              const float *pAXW_cross_term,
+                                              float cx,
+                                              float b_factor,
+                                              float *pIcalc);
+
     void calculateIofQfromModel(unsigned int totalInWorkingSet,
                                 const float *pQ, // q values (vector)
                                 const float *pApw, // hydrated particle squared amplitude (vector)
@@ -133,7 +142,7 @@ public:
                                   std::vector<float> &aXW_cross_term, unsigned int totalInWorkingSet);
 
     void
-    writeBestModelToFile(std::vector<float> &qvalues, AtomisticModel &model, const float *aP,
+    writeBestModelToFile(std::vector<float> &qvalues, std::string filename, AtomisticModel &model, const float *aP,
                          const float *aC, const float *aCXP);
 
     void writeBestChiFreeModel(AtomisticModel &model,
@@ -152,6 +161,12 @@ public:
 
         return buffer;
     }
+
+    float
+    calculateIofQfromModelWithVariancesMooreBfactor(unsigned int totalInWorkingSet, const float *pQ, const float *pApw,
+                                                    const float *pNeighbors, const float *pNonNeighbors,
+                                                    const float *pAXW_cross_term, float cx, float b_factor,
+                                                    float *pIcalc);
 };
 
 

@@ -126,10 +126,12 @@ void Fit::assemblePartials(AtomisticModel &model,
         // PI constant gets absorbed into the scaling constant below during the chi2 fit
         pAp[q] = a_p_norm; //*pi_constant;
         pAw[q] = a_w_norm; //*pi_constant;
-        pAc[q] = a_x_norm; //*pi_constant;
+        pAc[q] = a_x_norm; //*pi_constant; // includes hydration waters
 
         pApw[q] = a_p_norm + a_w_norm + 2.0f*(aPWR_term + aPWI_term); // hydratedParticle
+
         pAXW_cross_term[q] = -2.0f*(aXWR_term + aXWI_term + aPXR_term + aPXI_term); // invert phase
+
     } // end loop over q values
 }
 
@@ -218,6 +220,9 @@ void Fit::assemblePartials(AtomisticModel &model,
         pAXW_cross_term[q] = -2.0f*(aXWR_term + aXWI_term + aPXR_term + aPXI_term); // invert phase
     } // end loop over q values
 }
+
+
+
 
 
 void Fit::assemblePartialsFastHalf(AtomisticModel &model,
@@ -332,8 +337,6 @@ void Fit::assemblePartialsFastHalf(AtomisticModel &model,
             }
         }
 
-        //std::cout << q << " Does it:: " << a_p_norm << " " << sumItR << std::endl;
-
         pApw[q] = a_p_norm + a_w_norm + 2.0f*(aPWR_term + aPWI_term); // hydratedParticle
         pAXW_cross_term[q] = -2.0f*(aXWR_term + aXWI_term + aPXR_term + aPXI_term); // invert phase
     } // end loop over q values
@@ -379,6 +382,9 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
     // cross-terms
     float * pAXW_cross_term = aXW_cross_term.data();
 
+//    const float * excludedVolumeNeighbors = model.getExcludedVolumeIntensitiesNeighbors();
+//    const float * excludedVolumeNonNeighbors = model.getExcludedVolumeIntensitiesNonNeighbors();
+
     // perform grid search
     float sum, diff, scalar;
     bestCx = 0.0f;
@@ -393,9 +399,40 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
     std::vector<float> i_calc(totalInWorkingSet);
     auto pIcalc = i_calc.data();
 
-    const float delta_b = 0.331f; // actual equation is exp(-q^2*d_w/3), d_w goes to 100, divided by 3 is 33
-    float chi, b_factor, dw;
+    float delta_b = 0.331f; // actual equation is exp(-q^2*d_w/3), d_w goes to 100, divided by 3 is 33
 
+    //if (excludedVolumeNonNeighbors[totalInWorkingSet-1] < 0){
+
+//        float neighbor, nonneighbor;
+//        float maxdiff = FLT_MAX;
+//        float top = 0;
+//        float bottom = 1;
+//        float q2=1;
+//
+//        for (unsigned int i=0; i<totalInWorkingSet; i++){
+//
+//             neighbor = excludedVolumeNeighbors[i];
+//             nonneighbor = excludedVolumeNonNeighbors[i];
+//
+//             if (nonneighbor < 0){
+//              float mdiff = -nonneighbor/neighbor;
+//                 if (mdiff < maxdiff ){
+//                     maxdiff = mdiff;
+//                     q2 = qvalues[i];
+//                 }
+//             }
+//        }
+//
+//        q2 *= q2;
+//        std::cout << " q2 :::::  " << q2 << " " << maxdiff << std::endl;
+//        upper_Bfactor = 0.99*sqrtf(-std::logf(abs(maxdiff))*2/q2);
+//        delta_b = upper_Bfactor/33;
+
+    //}
+
+    std::cout << " upper B :::::  " << upper_Bfactor << std::endl;
+
+    float chi, b_factor, dw;
     auto total_b = (int)std::ceil(upper_Bfactor/delta_b); // divided by 3
 
     // setting match point requires total waters in hydration model
@@ -412,6 +449,16 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
 
         for (int incr_b = 0; incr_b < total_b; incr_b++){
 
+//            scalar = calculateIofQfromModelWithBackground(totalInWorkingSet,
+//                                                         pQ,
+//                                                         pApw,
+//                                                         pAc,
+//                                                         pAXW_cross_term,
+//                                                         cx,
+//                                                         b_factor,
+//                                                         pIcalc
+//            );
+
             scalar = calculateIofQfromModelWithVariances(totalInWorkingSet,
                                                          pQ,
                                                          pApw,
@@ -422,10 +469,32 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
                                                          pIcalc
             );
 
+
+//            scalar = calculateIofQfromModelWithVariancesNewMethod(totalInWorkingSet,
+//                                                         pQ,
+//                                                         pApw,
+//                                                         pAc,
+//                                                         pAXW_cross_term,
+//                                                         cx,
+//                                                         b_factor,
+//                                                         pIcalc
+//            );
+
+//            scalar = calculateIofQfromModelWithVariancesMooreBfactor(totalInWorkingSet,
+//                    pQ,
+//                    pApw,
+//                    excludedVolumeNeighbors,
+//                    excludedVolumeNonNeighbors,
+//                    pAXW_cross_term,
+//                    cx,
+//                    b_factor,
+//                    pIcalc
+//                    );
+
             // score the model
             sum = 0.0f;
             for(unsigned int q =0; q < totalInWorkingSet; q++) {
-                diff = i_obs[q] - scalar * pIcalc[q];
+                diff = i_obs[q] - scalar*pIcalc[q];
                 sum += diff*diff*inv_variance[q];
                 residuals[q] = diff;
             }
@@ -436,7 +505,6 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
             sum += dw;
 
             if (sum < bestScore){
-
                 bestScore = sum;
                 bestChi = chi;
                 bestBfactor = b_factor;
@@ -446,7 +514,7 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
 
                 // do point transfer and do the scalar after finishing
                 for(unsigned int q =0; q < totalInWorkingSet; q++) {
-                    i_best[q] = scalar * pIcalc[q];
+                    i_best[q] = scalar*pIcalc[q];
                 }
             }
 
@@ -458,10 +526,10 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
 
     SASTOOLS_UTILS_H::logger("CX RANGE", formatNumber(lowcx*contrastMatchScale,3) + " to " + formatNumber(cx,3));
 
-std::cout << "_______________________________________________________________________" << std::endl;
+    std::cout << "_______________________________________________________________________" << std::endl;
 
-//
     printBestScores();
+
 //    header = iofqdata.getHeader();
 //    writeBestModelToFile(const_cast<std::vector<float> &>(qvalues), model, pApw, pAc, pAXW_cross_term);
 
@@ -555,7 +623,6 @@ void Fit::searchBFactor(IofQData &iofqdata, AtomisticModel &model, Waters &water
 
         b_factor += delta_b;
     }
-
 }
 
 
@@ -652,6 +719,9 @@ void Fit::fitFixedCxandBFactor(IofQData &iofqdata,
     float * pAc = norm_aCs.data();
     float * pApw = norm_aPWs.data();
 
+//    const float * excludedVolumeNeighbors = model.getExcludedVolumeIntensitiesNeighbors();
+//    const float * excludedVolumeNonNeighbors = model.getExcludedVolumeIntensitiesNonNeighbors();
+
     // cross-terms
     float * pAXW_cross_term = aXW_cross_term.data();
 
@@ -681,6 +751,17 @@ void Fit::fitFixedCxandBFactor(IofQData &iofqdata,
                                                  pIcalc
     );
 
+//    float scalar = calculateIofQfromModelWithVariancesMooreBfactor(totalInWorkingSet,
+//                                                             pQ,
+//                                                             pApw,
+//                                                             excludedVolumeNeighbors,
+//                                                             excludedVolumeNonNeighbors,
+//                                                             pAXW_cross_term,
+//                                                             cx,
+//                                                             fixedBF,
+//                                                             pIcalc
+//    );
+
     // score the model
     float sum = 0.0f, diff;
     for(unsigned int q =0; q < totalInWorkingSet; q++) {
@@ -708,7 +789,6 @@ void Fit::fitFixedCxandBFactor(IofQData &iofqdata,
     for(unsigned int q =0; q < totalInWorkingSet; q++) {
         i_best[q] = scalar * pIcalc[q];
     }
-
 }
 
 /*
@@ -759,8 +839,14 @@ void Fit::writeModelToFile(float cx,
     fprintf(pFile, "# REMARK COLUMNS 5 :: %s \n", "excluded volume");
     fprintf(pFile, "# REMARK COLUMNS 6 :: %s \n", "cross-terms");
 
+
+    float q_val, exp_term;
+
     for(unsigned int i=0; i < total; i++){
-        fprintf(pFile, "%5i %.3E %.5E %.5E %.5E %.5E\n", (i+1), qvalues[i], icalc[i], aP[i], aC[i], aCXP[i]);
+        q_val = qvalues[i];
+        exp_term = expf(-(q_val*q_val)*bfactor*inv16Pi2)*cx;
+
+        fprintf(pFile, "%5i %.3E %.5E %.5E %.5E %.5E\n", (i+1), qvalues[i], icalc[i], aP[i], aC[i]*exp_term*exp_term, aCXP[i]);
     }
 
     fclose(pFile);
@@ -769,6 +855,7 @@ void Fit::writeModelToFile(float cx,
 
 void Fit::writeBestModelToFile(
                            std::vector<float> & qvalues,
+                           std::string filename,
                            AtomisticModel & model,
                            const float * aP,  // particle amplitude
                            const float * aC,  // excluded volume
@@ -801,6 +888,7 @@ void Fit::writeBestModelToFile(
     }
 
     fprintf(pFile, "# REMARK              :: %s\n", model.getPDBModel().getFilename().c_str());
+    fprintf(pFile, "# REMARK         DATA :: %s \n", filename.c_str());
     fprintf(pFile, "# REMARK           CX :: %.4f \n", bestCx);
     fprintf(pFile, "# REMARK            B :: %.2f \n", bestBfactor);
     fprintf(pFile, "# REMARK        SCORE :: %.3f \n", bestScore);
@@ -856,8 +944,49 @@ float Fit::calculateIofQfromModelWithVariances(unsigned int totalInWorkingSet,
 
         i_of_q = pApw[q] + pAc[q]*exp_term*exp_term + exp_term*pAXW_cross_term[q];
 
-       // std::cout << q << " " << i_of_q << std::endl;
+        c_obs_calc += i_of_q*i_obs_over_variance[q];
+        calc_var += i_of_q*i_of_q*inv_variance[q];
 
+        pIcalc[q] = i_of_q;
+    }
+
+    return c_obs_calc/calc_var;
+}
+
+
+/*
+ * returns scale factor
+ */
+float Fit::calculateIofQfromModelWithVariancesMooreBfactor(unsigned int totalInWorkingSet,
+                                               const float * pQ,
+                                               const float * pApw,
+                                               const float * pNeighbors,
+                                               const float * pNonNeighbors,
+                                               const float * pAXW_cross_term,
+                                               float cx,
+                                               float b_factor,
+                                               float * pIcalc
+                                               ){
+
+    float i_of_q, q_val;
+    float exp_term;
+    float constant = -0.5*b_factor;
+
+    float c_obs_calc = 0.0f;
+    float calc_var = 0.0f;
+
+    for(unsigned int q =0; q < totalInWorkingSet; q++) {
+
+        q_val = pQ[q]; // get qvalue to calculate b-factor
+        exp_term = expf(constant*q_val*q_val)*cx;
+        //exp_term = expf(-(q_val*q_val)*b_factor*inv16Pi2)*cx;
+
+        //i_of_q = pApw[q] + pAc[q]*exp_term*exp_term + exp_term*pAXW_cross_term[q];
+        //i_of_q = pApw[q] + pAc[q]*exp_term*exp_term + exp_term*pAXW_cross_term[q];
+        i_of_q = pApw[q] + pNonNeighbors[q]*cx*cx + pNeighbors[q]*exp_term*exp_term + pAXW_cross_term[q];
+        //i_of_q = pApw[q] + pNonNeighbors[q]*exp_term*exp_term + pNeighbors[q]*exp_term*exp_term + exp_term*pAXW_cross_term[q];
+
+        // std::cout << q << " " << i_of_q << std::endl;
         c_obs_calc += i_of_q*i_obs_over_variance[q];
         calc_var += i_of_q*i_of_q*inv_variance[q];
 
@@ -867,6 +996,55 @@ float Fit::calculateIofQfromModelWithVariances(unsigned int totalInWorkingSet,
     return c_obs_calc/calc_var;
 
 }
+
+
+/*
+ * returns scale factor
+ */
+float Fit::calculateIofQfromModelWithBackground(unsigned int totalInWorkingSet,
+                                               const float * pQ,
+                                               const float * pApw,
+                                               const float * pAc,
+                                               const float * pAXW_cross_term,
+                                               float cx,
+                                               float b_factor,
+                                               float * pIcalc
+){
+    float i_of_q, q_val;
+    float exp_term;
+    float y_val;
+
+    std::vector<float> calculated(totalInWorkingSet);
+
+    float sumxy=0, sumy = 0, sumx = 0, sumx2 = 0;
+
+    for(unsigned int q =0; q < totalInWorkingSet; q++) {
+
+        q_val = pQ[q]; // get qvalue to calculate b-factor
+        exp_term = expf(-(q_val*q_val)*b_factor*inv16Pi2)*cx;
+
+        i_of_q = pApw[q] + pAc[q]*exp_term*exp_term + exp_term*pAXW_cross_term[q];
+
+        calculated[q] = i_of_q;
+        // std::cout << q << " " << i_of_q << std::endl;
+        y_val = i_obs[q];
+
+        sumy += y_val;
+        sumxy += i_of_q*y_val;
+        sumx += i_of_q;
+        sumx2 += i_of_q*i_of_q;
+    }
+
+    float scale = (totalInWorkingSet*sumxy - sumy*sumx)/(totalInWorkingSet*sumx2 - sumx*sumx);
+    float background = (sumy - scale*sumx)/totalInWorkingSet;
+
+    for(unsigned int q =0; q < totalInWorkingSet; q++) {
+        pIcalc[q] = scale*calculated[q] + background;
+    }
+
+    return scale;
+}
+
 
 void Fit::calculateIofQfromModel(unsigned int totalInWorkingSet,
                                                const float * pQ,
@@ -972,7 +1150,6 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
 
         this->search(iofqdata, model, waterModel);
         results.emplace_back(Result(bestScore, bestScaleCoef, bestCx, bestBfactor, bestDW, bestChi, i_best, iofqdata.getSelectedIndices()));
-
     }
 
     // now sort and take the median of Results
@@ -1012,13 +1189,13 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
     iofqdata.setAllDataToWorkingSet();
 
     std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
-//
+
 //    // recalculate Partials for the initial models
     waterModel.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
     model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
 //
     fitFixedCxandBFactor(iofqdata, model, waterModel, bestBfactor, bestCx);
-    writeBestModelToFile(qvalues, model, norm_aPWs.data(), norm_aCs.data(), aXW_cross_term.data());
+    writeBestModelToFile(qvalues, iofqdata.getFilename(), model, norm_aPWs.data(), norm_aCs.data(), aXW_cross_term.data());
 
 }
 

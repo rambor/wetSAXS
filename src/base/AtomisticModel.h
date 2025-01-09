@@ -28,6 +28,7 @@
 #include <string>
 #include <sastools/vector3.h>
 #include <sastools/PDBModel.h>
+#include <sastools/Bead.h>
 #include <set>
 #include "SphericalHarmonics.h"
 #include "SphericalBessels.h"
@@ -54,21 +55,34 @@ private:
     std::vector<float> rvalues;
     std::vector<float> thetas; // could be aligned memory
     std::vector<float> phis;
+    std::vector<float> bead_rvalues;
+    std::vector<float> bead_thetas; // could be aligned memory
+    std::vector<float> bead_phis;
+
     std::vector<float> binned_distances;
     std::vector<float> almRealSum; // partial sums
     std::vector<float> almImagSum;
     std::vector<float> almRealExcludedVolSum; // partial sums
     std::vector<float> almImagExcludedVolSum;
+
+    std::vector<float> clmNonNeighbors, clmNeighbors;
+
     std::vector<float> binnedPartials;
 
     std::set <int> atomList;
 
     std::map <std::string, int> hydrogens;
+    std::map<unsigned int, std::vector<unsigned int>> neighbors;
+    std::map<unsigned int, std::vector<unsigned int>> non_neighbors;
+
 
     std::vector<float> fractionOccAtoms;
+    std::vector<float> gaussian_radii;
 
-    SphericalHarmonics she;
-    SphericalBessels sbj;
+    std::vector<Bead> beads;
+
+    SphericalHarmonics she, she_x;
+    SphericalBessels sbj, sbj_x;
 
 public:
     AtomisticModel()=default;
@@ -102,6 +116,10 @@ public:
         rvalues = std::move(model.rvalues);
         thetas = std::move(model.thetas);
         phis = std::move(model.phis);
+        bead_rvalues = std::move(model.bead_rvalues);
+        bead_thetas = std::move(model.bead_thetas);
+        bead_phis = std::move(model.bead_phis);
+
         binned_distances = std::move(model.binned_distances);
         almRealSum = std::move(model.almRealSum);
         almImagSum = std::move(model.almImagSum);
@@ -110,10 +128,19 @@ public:
         almImagExcludedVolSum = std::move(model.almImagExcludedVolSum);
         binnedPartials = std::move(model.binnedPartials);
 
+        clmNonNeighbors = std::move(model.clmNonNeighbors);
+        clmNeighbors = std::move(model.clmNeighbors);
+
         atomList = std::move(model.atomList);
         hydrogens = std::move(model.hydrogens);
+        neighbors = std::move(model.neighbors);
+        non_neighbors = std::move(model.non_neighbors);
 
         fractionOccAtoms = std::move(model.fractionOccAtoms);
+        gaussian_radii = std::move(model.gaussian_radii);
+
+        beads = std::move(model.beads);
+
 
         she = std::move(model.she);
         sbj = std::move(model.sbj);
@@ -149,6 +176,9 @@ public:
     const float * getExcludedVolumePartialsReal() { return almRealExcludedVolSum.data();} // partial sums
     const float * getExcludedVolumePartialsImag(){ return almImagExcludedVolSum.data();}
 
+    const float * getExcludedVolumeIntensitiesNeighbors(){ return clmNeighbors.data(); }
+    const float * getExcludedVolumeIntensitiesNonNeighbors(){ return clmNonNeighbors.data(); }
+
     const float * getBinnedPartials() { return binnedPartials.data();}
 
     std::vector<float> * getRValuesVector() { return &rvalues;}
@@ -180,25 +210,53 @@ public:
 
     float getMatchPoint(){ return matchPoint;}
 
+    void createHCPGridModel(float bin_width);
+
     void populateBinnedDistances(unsigned int lmax);
-
-    inline void babinet_at_q(float qvalue, std::vector<float> & babinets, float * pAtomicVol, std::vector<float> & cbrft_vol2 ){
-
-        float q2 = qvalue*qvalue*M_PI;
-        for(unsigned int i=0; i<totalAtoms; i++){ // this is a function of q
-            babinets[i] = pAtomicVol[i]*expf(-q2*cbrft_vol2[i]);
-        }
-    }
 
     void populateSphBesselsArray(int l, std::vector<float> &qr, float *bessel_alq);
 
-    void setFractionalVolume(float value){
+    void setFractionalVolume(float volume){
+
         fractionOccAtoms.resize(totalAtoms);
         auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
-        float inv = 1.0f/value;
+
+        float inv = 1.0f/volume;
 
         for(unsigned int i=0; i<totalAtoms; i++){
             fractionOccAtoms[i] =  pAtomicVolumes[i]*inv; // normalized to volume of water, looking at fractions of water volume
+        }
+    }
+
+    void setGaussianRadii(){
+        auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
+        gaussian_radii.resize(totalAtoms);
+        float * pvol;
+        float invpi3halves = 1.0f/std::sqrtf(M_PI*M_PI*M_PI);
+
+        for(unsigned int i=0; i<totalAtoms; i++){
+            pvol = &pAtomicVolumes[i];
+            gaussian_radii[i] =  std::cbrt(*pvol * invpi3halves); // normalized to volume of water, looking at fractions of water volume
+        }
+    }
+
+    /*
+     * Gaussian volumes where v = r^3 * pi^3/2
+     */
+    void setFractionalVolumeAtQ(float q_val){
+
+        fractionOccAtoms.resize(totalAtoms);
+
+        float factor, diff, inv = 1.0f/(4*M_PI);
+        float pw_vol = 29.9;
+        float qval2 = q_val*q_val;
+
+        for(unsigned int i=0; i<totalAtoms; i++){
+
+            diff = gaussian_radii[i]/1.75f;
+            factor = pw_vol*(1 - diff*diff*diff);
+
+            fractionOccAtoms[i] = 0.334*factor * std::expf(-std::cbrt(factor*factor)*inv*qval2); // normalized to volume of water, looking at fractions of water volume
         }
     }
 
@@ -216,6 +274,16 @@ public:
     SphericalHarmonics & getSHE(){ return she;}
 
     SphericalBessels & getSBJ() { return sbj;}
+
+    void createNeighborhoods(float cutoff);
+
+    void createSphericalHarmonicsEx();
+
+    void createSphericalBesselsEx(unsigned int totalqvalues, std::vector<float> &qvalues);
+
+    void calculateExVolPartialAmplitudes(unsigned int lmax, unsigned int totalqvalues, std::vector<float> &qvalues,
+                                         bool recalculate);
+
 };
 
 

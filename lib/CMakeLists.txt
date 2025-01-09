@@ -34,8 +34,10 @@ addToIt(Fit)
 addToIt(Waters)
 addToIt(functions_WETSAXS)
 addToIt(SBESJY)
+addToIt(Ensemble)
 
 include_directories(../src/base)
+include_directories(../src/fsrc)
 
 MESSAGE("** SOURCES => ${SOURCES}")
 MESSAGE("** MAIN DIR => ${CMAKE_SOURCE_DIR}")
@@ -44,5 +46,5 @@ set(TEST_OBJ ${CMAKE_PROJECT_NAME}_test)
 
 add_executable(${TEST_OBJ} ${CPP_FILES})
 
-target_link_libraries(${TEST_OBJ} PRIVATE ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM} ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib gtest gtest_main)
+target_link_libraries(${TEST_OBJ} PRIVATE ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM} ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib gtest gtest_main)
 # target_link_libraries(${TEST_OBJ} gtest gtest_main)
