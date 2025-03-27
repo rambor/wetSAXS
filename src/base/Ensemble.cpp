@@ -31,7 +31,6 @@ Ensemble::Ensemble(std::vector<std::string> file_names, std::string directory) {
 
     // check files exits and directory is writable
     for (auto & filename : file_names){
-
         try{
 
             FileClass basefile = FileClass(filename);
@@ -216,7 +215,6 @@ void Ensemble::search(unsigned int lmax, IofQData * iofqfile, bool forceRNA, boo
         }
     }
 
-
     // for a given model, find closest neighbor?
     // demonstrate development is beyond current state of the art
 
@@ -244,159 +242,6 @@ void Ensemble::search(unsigned int lmax, IofQData * iofqfile, bool forceRNA, boo
 
 }
 
-void Ensemble::linearCombination(unsigned int lmax, IofQData * iofqfile,
-                                 unsigned int total_cx,
-                                 float lowcx,
-                                 float highcx,
-                                 float upper_Bfactor,
-                                 bool forceRNA, bool keepWaters, int oversampling){
-
-    unsigned int information_limit = lmax - 2;
-    if (filenames.size() > information_limit){
-        std::cerr << "Too many models for independent linear combination " << std::endl;
-    }
-
-    iofqfile->makeWorkingSet(oversampling > filenames.size() ? oversampling : filenames.size());
-
-    unsigned int totalInWorkingSet = iofqfile->getTotalInWorkingSet();
-    auto qvalues = iofqfile->getWorkingSetQvalues();
-    auto pQ = qvalues.data();
-    const std::vector<Datum> & workingSet = iofqfile->getWorkingSet();
-
-    std::vector<float> i_obs_over_variance(totalInWorkingSet);
-    std::vector<float> inv_variance(totalInWorkingSet);
-
-    for(unsigned int q =0; q < totalInWorkingSet; q++) {
-        const Datum *pW = &workingSet[q];
-        i_obs_over_variance[q] = pW->getI() * pW->getInvVar();
-        inv_variance[q] = pW->getInvVar();
-    }
-
-    std::vector<Amplitudes> models = std::vector<Amplitudes>();
-
-    float contrastMatchScale=1.0;
-    unsigned int total_models = 0;
-    std::vector<unsigned int> indices;
-
-    bool setMatch = true;
-    for (auto & filename : filenames){
-
-        try{
-            AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
-
-            model.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues, false);
-
-            if (model.getPDBModel().getTotalResidues() < 1){
-                throw (filename);
-            }
-
-            // create water model
-            Waters waters = Waters();
-            waters.hydrateAtomisticModel(model); // add waters to PDB
-            waters.createSphericalCoordinateOfHydration();
-            waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
-
-            if (setMatch){
-                model.setMatchPointScale(waters.getTotalWaters());
-                contrastMatchScale = model.getMatchPoint();
-                setMatch = false;
-            }
-            models.emplace_back(Amplitudes(total_models, model.getPDBModel().getFileStemName()));
-            Amplitudes * pCalc = &models[total_models];
-
-            std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
-
-            // assemble the partials and
-            assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
-            pCalc->addValues(aPs, aPWs, aCs, aXW_cross_term);
-
-            indices.push_back(total_models);
-            total_models++;
-        } catch (std::string & fl){
-            SASTOOLS_UTILS_H::logger("Improper PDB file", "skipping..." + fl);
-        }
-    }
-
-    boost::numeric::ublas::matrix<float> model_intensities(totalInWorkingSet, total_models);
-
-    // perform grid search
-    float deltaCX;
-    const float delta_b = 0.331f; // actual equation is exp(-q^2*d_w/3), d_w goes to 100, divided by 3 is 33
-    float chi, b_factor, dw;
-
-    auto total_b = (int)std::ceil(upper_Bfactor/delta_b); // divided by 3
-
-    float cx =  lowcx*contrastMatchScale, scalar;
-    float inv_n_s = 1.0f/(float)(totalInWorkingSet-2);
-
-
-    for(int incr_cx = 0; incr_cx < total_cx; incr_cx++){
-
-        b_factor = 0.0f;
-
-        for (int incr_b = 0; incr_b < total_b; incr_b++){
-
-            scalar = populateIntensitiesMatrix(totalInWorkingSet,
-                                                         pQ,
-                                                         models,
-                                                         cx,
-                                                         b_factor,
-                                                         model_intensities
-            );
-
-            // perform cross-entropy optimization
-
-
-
-
-            // form pseudo inverse
-            boost::numeric::ublas::matrix<float> um;
-            boost::numeric::ublas::matrix<float> sm;
-            boost::numeric::ublas::matrix<float> vm;
-            // total_q must be > total_models
-            svd(model_intensities, um, sm, vm);
-
-            // perform fit
-            boost::numeric::ublas::matrix<float> a_star;
-            pseudo_inverse(lmax, a_star, um, sm, vm);
-
-            // score the model
-//            sum = 0.0f;
-//            for(unsigned int q =0; q < totalInWorkingSet; q++) {
-//                diff = i_obs[q] - scalar * pIcalc[q];
-//                sum += diff*diff*inv_variance[q];
-//                residuals[q] = diff;
-//            }
-//
-//            sum *= inv_n_s;
-//            chi = sum;
-//            dw = fabs(2 - calculateDurbinWatson(residuals.data(), totalInWorkingSet)); // should be near zero
-//            sum += dw;
-//
-//            if (sum < bestScore){
-//
-//                bestScore = sum;
-//                bestChi = chi;
-//                bestBfactor = b_factor;
-//                bestCx = cx;
-//                bestScaleCoef = scalar;
-//                bestDW = dw;
-//
-//                // do point transfer and do the scalar after finishing
-//                for(unsigned int q =0; q < totalInWorkingSet; q++) {
-//                    i_best[q] = scalar * pIcalc[q];
-//                }
-//            }
-
-            b_factor += delta_b;
-        }
-
-        cx += deltaCX*contrastMatchScale;
-    }
-}
 
 void Ensemble::assemblePartials(unsigned int lmax, AtomisticModel &model,
                            Waters &waterModel,
@@ -782,8 +627,6 @@ void Ensemble::svd_qr_shift(boost::numeric::ublas::matrix < float >&u,
     }
 }
 
-// new call for AMR, treat and prevent
-
 
 void Ensemble::pseudo_inverse(
         unsigned int limit,
@@ -826,20 +669,26 @@ void Ensemble::standardizeData(nsNNLS::vector * vec, nsNNLS::vector * out_vec){
 
 }
 
-
+/*
+ * CE optimization method akin to knapsack problem
+ * adjustable parameters :: totalTrials
+ * coeffs are output values for model weights
+ */
 float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_variance,
                                         std::vector<float> & inv_variance,
                                         boost::numeric::ublas::matrix<float> & coeffs,
                                         boost::numeric::ublas::matrix<float> & model_iqs,
+                                         std::vector<float> & qvalues,
+                                         boost::numeric::ublas::matrix<float> & i_calc_all,
                                         boost::numeric::ublas::matrix<float> & i_obs){
 
     std::random_device rd;
     std::mt19937 gen(rd());
 
     unsigned int totalInWorkingSet = model_iqs.size1();
-    float inv_trial_size = 1.0f/(float)trial_size;
+    float inv_ensemble_size = 1.0f/(float)ensemble_size;
 
-    auto topN = (unsigned int)(frac*totalPerRound);
+    auto topN = (unsigned int)(rarity_param * totalPerRound);
 
     unsigned int totalModels = model_iqs.size2();
     std::vector<unsigned int> model_counts(totalModels); // should be one for every model
@@ -848,66 +697,93 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
 
     std::uniform_real_distribution<float> distributions(0,1.0);
     std::uniform_int_distribution<unsigned int> indices(0, totalModels-1);
-    std::vector<Probability> probabilities(totalModels);
 
+    std::vector<Probability> probabilities(totalModels); // each element initialized as 1/2
     Probability * pProb;
 
     std::vector<Trial> topTrials;
-    std::vector<unsigned int> trial(trial_size);
+    std::vector<unsigned int> trial(ensemble_size);
 
     topTrials.reserve(topN);
     topTrials.resize(topN);
 
     const unsigned int last = topN-1;
     float inv_topN = 1.0f/(float)topN;
-    float scalar, score, chi, dw, diff, i_of_q;
+    float scalar, score, chi, dw, diff, i_of_q, temp_residuals;
 
     std::vector<float> residuals(totalInWorkingSet);
     std::vector<float> selections(totalModels, 0.0);
     std::vector<float> selectionsSquared(totalModels, 0.0);
+    std::vector<unsigned int> selectedIndices(ensemble_size);
+
 
     float inv_n_s = 1.0f/(float)(totalInWorkingSet-2);
-    float best_score = FLT_MAX;
+    float best_score = FLT_MAX, best_scale_factor = 1;
 
-    for(unsigned int t = 0; t<totalTrials; t++){
+    char buffer [50];
+
+    logger("Total Models in Search", std::to_string(totalModels));
+    logger("ENSEMBLE SIZE", std::to_string(ensemble_size));
+    logger("Top N", std::to_string(topN));
+    logger("Total Trials", std::to_string(totalTrials));
+    logger("Total Per Trial", std::to_string(totalPerRound));
+    logger("------------------------------","------------------------------");
+
+    for (unsigned m=0; m<totalModels; m++) {
+        b_vec(m,0) = 1.0/(float)totalModels;
+    }
+
+    i_calc_all = boost::numeric::ublas::prod(model_iqs, b_vec);
+    // calculate scalar
+    scalar = calculate_scalar(totalInWorkingSet, i_calc_all, i_obs_over_variance, inv_variance);
+    // print out the entire ensemble composite scattering curve
+    //i_calc_all *= scalar;
+
+    std::string nameOf = "all.dat";
+    FILE * pFile = fopen(nameOf.c_str(), "w");
+    for(unsigned int q =0; q < totalInWorkingSet; q++) {
+        float q_val = qvalues[q];
+        fprintf(pFile, "%5i %.5E %.5E\n", q+1,  qvalues[q], i_calc_all(q,0));
+    }
+    fclose(pFile);
+
+    for(unsigned int t = 0; t<totalTrials; t++){ // upper limit - can terminate early if changes < epsilon
 
         unsigned int topAdded=0;
 
         for(unsigned int n=0; n<totalPerRound; n++) {
 
             b_vec.resize(totalModels,1);
-            std::fill(model_counts.begin(), model_counts.end(), 0);
+            selectedIndices.resize(ensemble_size);
 
-            // sample distribution
-            for (unsigned ts=0; ts<trial_size; ts++) {
+            std::fill(model_counts.begin(), model_counts.end(), 0); // should be changed to map<key,value> pair
+
+            // pick members of the ensemble, can do with replacement meaning same members can be picked multiple times
+            unsigned int ens = 0;
+            for (unsigned ts=0; ts < ensemble_size; ts++) {
                 bool doIt = true;
                 while(doIt){
                     unsigned int index = indices(gen);
                     if (distributions(gen) <= probabilities[index].value){
+                        selectedIndices[ens] = index;
                         model_counts[index] += 1;
+                        ens++;
                         doIt = false;
                         break;
                     }
                 }
             }
 
+            std::sort(selectedIndices.begin(), selectedIndices.end());
+
             // convert to weights
             for (unsigned m=0; m<totalModels; m++) {
-                b_vec(m,0) = (float)model_counts[m] * inv_trial_size;
+                b_vec(m,0) = (float)model_counts[m] * inv_ensemble_size;
             }
 
             i_calc = boost::numeric::ublas::prod(model_iqs, b_vec);
-            // perform fit
-            float c_obs_calc = 0.0f;
-            float calc_var = 0.0f;
-
-            for(unsigned int q =0; q < totalInWorkingSet; q++) {
-                i_of_q = i_calc(q,0);
-                c_obs_calc += i_of_q*i_obs_over_variance[q];
-                calc_var += i_of_q*i_of_q*inv_variance[q];
-            }
-
-            scalar = c_obs_calc/calc_var;
+            // calculate scalar
+            scalar = calculate_scalar(totalInWorkingSet, i_calc, i_obs_over_variance, inv_variance);
 
             score = 0.0f;
             for(unsigned int q =0; q < totalInWorkingSet; q++) {
@@ -915,6 +791,7 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
                 score += diff*diff*inv_variance[q];
                 residuals[q] = diff;
             }
+
 
             score *= inv_n_s;
             chi = score;
@@ -926,61 +803,338 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
                 Trial * pTrial = &topTrials[topAdded];
                 pTrial->value = score;
                 pTrial->model_weights.swap(b_vec);
+                pTrial->indices.swap(selectedIndices);
                 pTrial->chi = chi;
                 pTrial->dw = dw;
+                pTrial->scale_factor = scalar;
                 topAdded++;
                 std::sort(topTrials.begin(), topTrials.begin()+topAdded);
             } else if (score < topTrials[last].value){
+                // is the new trial difference or similar to existing trial
+                // perform cosine similarity for selected indices
+                // if similar and lower energy, replace the configuration
+                // if different than all of them, and lower energy, replace the last model and sort the list
                 /*
                  * replace last entry and sort
                  */
                 Trial * pTrial = &topTrials[last];
                 pTrial->value = score;
                 pTrial->model_weights.swap(b_vec);
+                pTrial->indices.swap(selectedIndices);
                 pTrial->chi = chi;
                 pTrial->dw = dw;
+                pTrial->scale_factor = scalar;
                 std::sort(topTrials.begin(), topTrials.end());
             }
         }
 
         /*
-         * for each bead in topN, count occurrences
+         * for each in topN, count occurrences
          */
         std::fill(selections.begin(), selections.end(), 0.0);
         float bval;
         for(auto & trial : topTrials){
             for(unsigned int b=0; b<totalModels; b++){
-                selections[b] += trial.model_weights(b,0);
+                selections[b] += trial.model_weights(b,0); // weights are normalized to ensemble size
             }
         }
 
-        float oldprob;
-        for(unsigned int b=0; b<totalModels; b++){
-            pProb = &probabilities[b];
-            oldprob = (1.0f - updateAlpha)*pProb->value;
-            (pProb->value) = updateAlpha*selections[b]*inv_topN + oldprob;
+        // updating is naive, could do something more sophisticated using expectation-maximization
+        if (t < 13){ // smooth updating model
+            for(unsigned int b=0; b<totalModels; b++){
+                pProb = &probabilities[b];
+                (pProb->value) = updateAlpha*selections[b]*inv_topN + (1.0f - updateAlpha)*pProb->value;
+            }
+        } else { // switch to coarse
+            for(unsigned int b=0; b<totalModels; b++){
+                probabilities[b].value = selections[b]*inv_topN;
+            }
         }
 
-
+        // copy coefficients of the best performances
         if (topTrials[0].value < best_score){
             best_score = topTrials[0].value;
-            std::cout << " Best Score " << t << " " << best_score << " " << topTrials[0].dw << " " << topTrials[0].model_weights << std::endl;
+            best_scale_factor = topTrials[0].scale_factor;
             for(unsigned int i=0; i<totalModels; i++){
-                coeffs(i,0) = topTrials[0].model_weights(i,0);
+                coeffs(i,0) = topTrials[0].model_weights(i,0)*best_scale_factor;
             }
-        } // stopping criteria?
+        }
+
+        sprintf (buffer, "TRIAL %3i", t); // change the number to a string for name
+        std::string strial = buffer;
+
+        sprintf (buffer, "BEST SCORE %7.4f DELTA %.4f", best_score, std::abs(best_score-topTrials[last].value)); // change the number to a string for name
+        logger(strial, buffer);
     }
 
-    std::vector<float> averages(totalModels,0.0);
-    for(unsigned int i=0; i<5; i++){
-        for(unsigned int b=0; b<totalModels; b++) {
-            averages[b] += topTrials[i].model_weights(b, 0);
+    logger("------------------------------","------------------------------");
+    // find smallest probability in set greater than zero
+    float smallest = FLT_MAX;
+    for(unsigned int b=0; b<totalModels; b++) {
+        float * p = & probabilities[b].value;
+        if (*p < smallest && *p > 0) {
+            smallest = *p;
         }
     }
 
+    // get the top 4 models and fit them to the data
+    std::vector<unsigned int> top4(4);
+    float maxp = 0;
     for(unsigned int b=0; b<totalModels; b++) {
-        std::cout << b << " " << averages[b]/5 << std::endl;
+        float * p = & probabilities[b].value;
+        if (*p > maxp ) {
+            maxp = *p;
+            top4[0] = b;
+        }
+    }
+    float maxlimit = maxp;
+    maxp = 0;
+    for(unsigned int b=0; b<totalModels; b++) {
+        float * p = & probabilities[b].value;
+        if (*p > maxp && maxp <= maxlimit) {
+            maxp = *p;
+            top4[1] = b;
+        }
     }
 
+    maxlimit = maxp;
+    maxp = 0;
+    for(unsigned int b=0; b<totalModels; b++) {
+        float * p = & probabilities[b].value;
+        if (*p > maxp && maxp <= maxlimit) {
+            maxp = *p;
+            top4[2] = b;
+        }
+    }
+
+    maxlimit = maxp;
+    maxp = 0;
+    for(unsigned int b=0; b<totalModels; b++) {
+        float * p = & probabilities[b].value;
+        if (*p > maxp && maxp <= maxlimit) {
+            maxp = *p;
+            top4[3] = b;
+        }
+    }
+
+    // perform linear fits of top four identified conformers
+//    boost::numeric::ublas::matrix<float> model_iqs_4(model_iqs.size1(), 4);
+//    unsigned int col = 0;
+//    for (auto & ind : top4) {
+//        // combine and add noise
+//        for(unsigned int q=0; q<totalInWorkingSet; q++){
+//            model_iqs_4(q, col) = model_iqs(q, ind);
+//        }
+//        col+=1;
+//    }
+
+    std::vector<std::vector<unsigned int>> comb;
+    comb.emplace_back(std::vector<unsigned int>(1));
+    comb.emplace_back(std::vector<unsigned int>(2));
+    comb.emplace_back(std::vector<unsigned int>(3));
+    comb.emplace_back(std::vector<unsigned int>(4));
+
+    combinatorial(
+                  inv_variance,
+                  top4,
+                  model_iqs,
+                  i_obs,
+                  totalInWorkingSet,
+                  4);
+
+    nameOf = "selected_ensemble_summary.txt";
+    pFile = fopen(nameOf.c_str(), "w");
+
+    unsigned int totalSelected = 0;
+    for(unsigned int b=0; b<totalModels; b++) {
+        if (probabilities[b].value > 0) {
+            unsigned int bbt = std::ceil(probabilities[b].value/smallest);
+            Param *pr = &params[b];
+            totalSelected+=1;
+            selected_files.push_back(pr->filename);
+            for(unsigned int j=0; j<bbt; j++){
+                fprintf(pFile, "%5i %s %7.5f %3i %8.4f %9.4f\n", b, pr->filename.c_str(), probabilities[b].value, bbt, pr->rg, pr->dmax);
+            }
+        }
+    }
+    fclose(pFile);
+
+
+    nameOf = "selected_ensemble_for_alignment.txt";
+    pFile = fopen(nameOf.c_str(), "w");
+
+    for(unsigned int b=0; b<totalModels; b++) {
+        if (probabilities[b].value > 0) {
+            unsigned int bbt = std::ceil(probabilities[b].value/smallest);
+            Param *pr = &params[b];
+            totalSelected+=1;
+            selected_files.push_back(pr->filename);
+            fprintf(pFile, "%s %5i \n", pr->filename.c_str(), bbt);
+        }
+    }
+    fclose(pFile);
+
+
+    logger("Total Unique Models", std::to_string(totalSelected));
+
+    nameOf = "all_summary.txt";
+    pFile = fopen(nameOf.c_str(), "w");
+
+    for(unsigned int b=0; b<totalModels; b++) {
+        Param *pr = &params[b];
+        fprintf(pFile, "%5i %s %7.5f %8.4f\n", b, pr->filename.c_str(), pr->rg, pr->dmax);
+    }
+    fclose(pFile);
+
     return best_score;
+}
+
+/*
+ *
+ * model_iqs need to be normalized!  Meaning, the values in the column should scale from 1.0 as max
+ *
+ * n is the total number of models in the search
+ * k is the linear combination of models to use
+ * k < n, maxk < n
+ *
+ * need an Lmax check on the number of columns
+ * unsigned int limitSm = (lmax < trial_models.size2()) ? lmax : trial_models.size2();
+ *
+ * using SVD, scaling constants that are negative are nonsensical as a solution (can't have negative concentrations)
+ * We will only report solutions that are all positive and infer that poor solutions not reported have negative scaling constants
+ * NNLS was tried, results take longer but similar.
+ *
+ */
+void Ensemble::combinatorial (
+                              std::vector<float> &inv_variance,
+                              std::vector<unsigned int> selected_indices_of_model_iqs,
+                              boost::numeric::ublas::matrix<float> &model_iqs,
+                              boost::numeric::ublas::matrix<float> &i_obs,
+                              unsigned int totalQInWorkingSet,
+                              int maxk) {
+
+    // must refer to last index of total models
+    unsigned int n_models = selected_indices_of_model_iqs.size()-1;
+
+    if (maxk >= n_models){ // throw exception
+
+    }
+
+    logger("Total Models", std::to_string(n_models));
+    logger("Starting", "pairwise SVD search");
+
+    boost::numeric::ublas::matrix<float> um;
+    boost::numeric::ublas::matrix<float> sm;
+    boost::numeric::ublas::matrix<float> vm;
+    boost::numeric::ublas::matrix<float> astar;
+
+    std::vector<float> residuals(totalQInWorkingSet);
+    float diff, score, chi, dw;
+    float inv_n_s = 1.0f/(float)(totalQInWorkingSet-2);
+
+    std::vector<Trial> topTrials;
+    topTrials.reserve(maxk);
+    topTrials.resize(maxk);
+
+    for (unsigned int k=1; k<=maxk; k++){
+
+        boost::numeric::ublas::matrix<float> trial_models(totalQInWorkingSet,k);
+
+        float best_score = FLT_MAX;
+
+        auto & bestTrial = topTrials[k-1];
+        // initialize values in numbers
+        std::vector<unsigned int> numbers(k);
+        for (unsigned int i = 0; i < k; ++i)
+            numbers.at(i) = i;
+
+        do { // iterate through all combinations of k
+            /*
+             * load the trial_models matrix
+             */
+            for (unsigned int i=0; i<k; i++){
+                unsigned int model_index = selected_indices_of_model_iqs[numbers[i]];
+                for(unsigned int q=0; q < totalQInWorkingSet; q++){
+                    trial_models(q, i) = model_iqs(q, model_index) ;
+                }
+            }
+
+            boost::numeric::ublas::matrix<float> a_matrix(trial_models); // make copy of matrix
+            this->svd(trial_models, um, sm, vm);
+            // lmax might be 23 and trial_models.size2 might be 2, so looking for the best pair
+            // unsigned int limitSm = (lmax < trial_models.size2()) ? lmax : trial_models.size2();
+            unsigned int limitSm = trial_models.size2();
+            this->pseudo_inverse(limitSm, astar, um, sm, vm);
+
+            boost::numeric::ublas::matrix<float> constants = boost::numeric::ublas::prod(astar, i_obs);
+
+            // all scaling constants must be greater than zero
+            bool skip = true;
+            for(int c=0; c<constants.size1(); c++){
+                if (constants(c,0) < 0){
+                    skip = false;
+                }
+            }
+
+            if (skip){ // score the answer
+                boost::numeric::ublas::matrix<float> i_calc = boost::numeric::ublas::prod(a_matrix, constants);
+                // calculate residuals
+                for(unsigned int q =0; q < totalQInWorkingSet; q++) {
+                    diff = i_obs(q,0) - i_calc(q,0);
+                    score += diff*diff*inv_variance[q];
+                    residuals[q] = diff;
+                }
+
+                score *= inv_n_s;
+
+                chi = score;
+                dw = fabs(2 - calculateDurbinWatson(residuals.data(), totalQInWorkingSet)); // should be near zero
+                score += 0.1*dw;
+
+                if (score < best_score){
+                    best_score = score;
+                    std::cout << "Best " << best_score << " " << k << std::endl;
+
+                    float sumIt = 0;
+                    for(int c=0; c<constants.size1(); c++){
+                        sumIt += constants(c,0);
+                    }
+
+                    for(int c=0; c<constants.size1(); c++){
+                        std::cout << " c" << numbers[c] << " : " << constants(c,0)/sumIt << " ";
+                    }
+                    std::cout << "\n";
+
+                    bestTrial.chi  = chi; // record each top trial for combination
+                    bestTrial.dw = dw;
+                    bestTrial.indices = numbers;
+                    bestTrial.model_weights.swap(constants);
+                }
+            }
+
+        } while (this->next_combination((int)n_models, (int)k, numbers));
+
+        // write out the best trials, report the best fit and the score difference between first and last
+//        std::cout << "k " << k << " " <<  topTrials[0].chi << " " << topTrials[0].dw << std::endl;
+//        auto & besty = topTrials[0];
+//        for(unsigned int ind =0; ind < k; ind++){
+//            std::cout << ind << " "  << filenames[besty.indices[ind]] << " " << besty.model_weights(ind,0) << std::endl;
+//        }
+
+//        for(unsigned q=0 ; q<totalQInWorkingSet; q++){
+//            std::cout << q <<  " ";
+//            for(unsigned int ind =0; ind < k; ind++){
+//                std::cout << model_iqs(q, besty.indices[ind])*besty.model_weights(ind,0) << " ";
+//            }
+//            std::cout << i_obs(q,0) << std::endl;
+//        }
+
+
+        // write out best performing models.
+        for (auto & best : topTrials){
+
+        }
+
+
+    }
 }

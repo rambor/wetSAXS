@@ -359,9 +359,9 @@ void Fit::setUpForFitting(IofQData &iofqdata, AtomisticModel &model, Waters &wat
     //std::vector<Datum> & workingSet = const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet());
     const std::vector<Datum> & workingSet = iofqdata.getWorkingSet();
 
+    i_obs.resize(totalInWorkingSet);
     i_obs_over_variance.resize(totalInWorkingSet);
     inv_variance.resize(totalInWorkingSet);
-    i_obs.resize(totalInWorkingSet);
     i_best.resize(totalInWorkingSet);
 
     for(unsigned int q =0; q < totalInWorkingSet; q++) {
@@ -427,17 +427,15 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
 //        std::cout << " q2 :::::  " << q2 << " " << maxdiff << std::endl;
 //        upper_Bfactor = 0.99*sqrtf(-std::logf(abs(maxdiff))*2/q2);
 //        delta_b = upper_Bfactor/33;
-
     //}
 
     std::cout << " upper B :::::  " << upper_Bfactor << std::endl;
-
     float chi, b_factor, dw;
     auto total_b = (int)std::ceil(upper_Bfactor/delta_b); // divided by 3
 
     // setting match point requires total waters in hydration model
     model.setMatchPointScale(waterModel.getTotalWaters());
-    float contrastMatchScale = model.getMatchPoint();
+    float contrastMatchScale = model.getMatchPoint(); // scale factor required to match forward scattering as if water
     SASTOOLS_UTILS_H::logger("Match Point", formatNumber(model.getMatchPoint(),3));
 
     float cx =  lowcx*contrastMatchScale;
@@ -529,6 +527,8 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
     std::cout << "_______________________________________________________________________" << std::endl;
 
     printBestScores();
+
+    SASTOOLS_UTILS_H::logger("Use this CX", formatNumber(bestCx/contrastMatchScale,3));
 
 //    header = iofqdata.getHeader();
 //    writeBestModelToFile(const_cast<std::vector<float> &>(qvalues), model, pApw, pAc, pAXW_cross_term);
@@ -739,7 +739,7 @@ void Fit::fitFixedCxandBFactor(IofQData &iofqdata,
 
     float inv_n_s = 1.0f/(float)(totalInWorkingSet-2);
 
-    float cx =  fixedCX;//*model.getMatchPoint(); // fractions of the contrastMatchScale
+    float cx =  fixedCX; // this is cx calculated as deltaCX*contrastMatchScale;
 
     float scalar = calculateIofQfromModelWithVariances(totalInWorkingSet,
                                                  pQ,
@@ -751,16 +751,6 @@ void Fit::fitFixedCxandBFactor(IofQData &iofqdata,
                                                  pIcalc
     );
 
-//    float scalar = calculateIofQfromModelWithVariancesMooreBfactor(totalInWorkingSet,
-//                                                             pQ,
-//                                                             pApw,
-//                                                             excludedVolumeNeighbors,
-//                                                             excludedVolumeNonNeighbors,
-//                                                             pAXW_cross_term,
-//                                                             cx,
-//                                                             fixedBF,
-//                                                             pIcalc
-//    );
 
     // score the model
     float sum = 0.0f, diff;
@@ -802,6 +792,7 @@ void Fit::writeModelToFile(float cx,
                            AtomisticModel & model,
                            std::vector<float> & icalc,
                            const float * aP,  // particle amplitude
+                           const float * aHP,  // hydrated particle amplitude
                            const float * aC,  // excluded volume
                            const float * aCXP // cross-term
                            ){
@@ -835,9 +826,10 @@ void Fit::writeModelToFile(float cx,
     fprintf(pFile, "# REMARK COLUMNS 1 :: %s \n", "index");
     fprintf(pFile, "# REMARK COLUMNS 2 :: %s \n", "momentum transfer (inverse Angstroms");
     fprintf(pFile, "# REMARK COLUMNS 3 :: %s \n", "Icalc");
-    fprintf(pFile, "# REMARK COLUMNS 4 :: %s \n", "hydrated particle");
-    fprintf(pFile, "# REMARK COLUMNS 5 :: %s \n", "excluded volume");
-    fprintf(pFile, "# REMARK COLUMNS 6 :: %s \n", "cross-terms");
+    fprintf(pFile, "# REMARK COLUMNS 4 :: %s \n", "in vacuo particle");
+    fprintf(pFile, "# REMARK COLUMNS 5 :: %s \n", "hydrated particle");
+    fprintf(pFile, "# REMARK COLUMNS 6 :: %s \n", "excluded volume");
+    fprintf(pFile, "# REMARK COLUMNS 7 :: %s \n", "cross-terms");
 
 
     float q_val, exp_term;
@@ -846,7 +838,7 @@ void Fit::writeModelToFile(float cx,
         q_val = qvalues[i];
         exp_term = expf(-(q_val*q_val)*bfactor*inv16Pi2)*cx;
 
-        fprintf(pFile, "%5i %.3E %.5E %.5E %.5E %.5E\n", (i+1), qvalues[i], icalc[i], aP[i], aC[i]*exp_term*exp_term, aCXP[i]);
+        fprintf(pFile, "%5i %.3E %.5E %.5E %.5E %.5E %.5E\n", (i+1), qvalues[i], icalc[i], aP[i], aHP[i], aC[i]*exp_term*exp_term, aCXP[i]);
     }
 
     fclose(pFile);
@@ -856,10 +848,10 @@ void Fit::writeModelToFile(float cx,
 void Fit::writeBestModelToFile(
                            std::vector<float> & qvalues,
                            std::string filename,
-                           AtomisticModel & model,
-                           const float * aP,  // particle amplitude
-                           const float * aC,  // excluded volume
-                           const float * aCXP // cross-term
+                           AtomisticModel & model
+//                           const float * aP,  // particle amplitude
+//                           const float * aC,  // excluded volume
+//                           const float * aCXP // cross-term
 ){
 
     std::string name = model.getPDBModel().getFileStemName();
@@ -875,6 +867,7 @@ void Fit::writeBestModelToFile(
 //    std::replace(cxs.begin(), cxs.end(), '.', 'p');
 //
 //    std::string nameOf = name + "_" + cxs + "_" + sbf + "_fit.dat";
+
     std::string nameOf = name + "_best_fit.dat";
 
     logger("OUTPUT FILE", nameOf);
@@ -911,6 +904,10 @@ void Fit::writeBestModelToFile(
     fprintf(pFile, "# REMARK    COLUMNS 6 :: %s \n", "Particle Scattering");
     fprintf(pFile, "# REMARK    COLUMNS 7 :: %s \n", "Excluded Volume Scattering");
     fprintf(pFile, "# REMARK    COLUMNS 8 :: %s \n", "Cross-term Scattering");
+
+    const float * aP = norm_aPs.data();
+    const float * aC = norm_aCs.data();
+    const float * aCXP = norm_aPWs.data();
 
     for(unsigned int i=0; i < total; i++){
         fprintf(pFile, "%5i %.3E %.5E %.5E %.5E %.5E %.5E %.5E\n", (i+1), qvalues[i], i_obs[i], i_best[i], (i_obs[i] - i_best[i]), aP[i], aC[i], aCXP[i]);
@@ -1107,7 +1104,8 @@ void Fit::simulate(float cx,
                                         pIcalc
     );
 
-    writeModelToFile(cx, bfactor, qvalues, model, i_calc, pApw, pAc, pAXW_cross_term);
+    float * pA = norm_asPs.data();
+    writeModelToFile(cx, bfactor, qvalues, model, i_calc, pA, pApw, pAc, pAXW_cross_term);
 }
 
 
@@ -1143,6 +1141,7 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
         SASTOOLS_UTILS_H::logger("CHI-free round", formatNumber(rnd+1));
 
         iofqdata.makeWorkingSet();
+
         std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
 
         waterModel.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, (rnd > 1));
@@ -1195,8 +1194,10 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
     model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
 //
     fitFixedCxandBFactor(iofqdata, model, waterModel, bestBfactor, bestCx);
-    writeBestModelToFile(qvalues, iofqdata.getFilename(), model, norm_aPWs.data(), norm_aCs.data(), aXW_cross_term.data());
 
+//    if (bestChi < 1.1){
+        writeBestModelToFile(qvalues, iofqdata.getFilename(), model);
+//    }
 }
 
 //buffer,  qvalues, i_calc, diff

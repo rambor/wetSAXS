@@ -71,18 +71,17 @@ private:
 
     std::set <int> atomList;
 
-    std::map <std::string, int> hydrogens;
+    //std::map <std::string, int> hydrogens;
     std::map<unsigned int, std::vector<unsigned int>> neighbors;
     std::map<unsigned int, std::vector<unsigned int>> non_neighbors;
 
-
     std::vector<float> fractionOccAtoms;
-    std::vector<float> gaussian_radii;
-
     std::vector<Bead> beads;
 
     SphericalHarmonics she, she_x;
     SphericalBessels sbj, sbj_x;
+
+    float rg = 0;
 
 public:
     AtomisticModel()=default;
@@ -132,18 +131,19 @@ public:
         clmNeighbors = std::move(model.clmNeighbors);
 
         atomList = std::move(model.atomList);
-        hydrogens = std::move(model.hydrogens);
+//        hydrogens = std::move(model.hydrogens);
         neighbors = std::move(model.neighbors);
         non_neighbors = std::move(model.non_neighbors);
 
         fractionOccAtoms = std::move(model.fractionOccAtoms);
-        gaussian_radii = std::move(model.gaussian_radii);
 
         beads = std::move(model.beads);
 
 
         she = std::move(model.she);
         sbj = std::move(model.sbj);
+
+        rg = std::move(model.rg);
 
         return *this;
     }
@@ -205,7 +205,7 @@ public:
                                                unsigned int totalqvalues,
                                                std::vector<float> &qvalues);
 
-    void setMatchPointScale(int * pAtomicNumbers, float * fractionalOccupancies);
+    void setMatchPointScale(int * pAtomicNumbers);
     void setMatchPointScale(unsigned int totalWatersInHydration);
 
     float getMatchPoint(){ return matchPoint;}
@@ -228,17 +228,22 @@ public:
         }
     }
 
-    void setGaussianRadii(){
-        auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
-        gaussian_radii.resize(totalAtoms);
-        float * pvol;
-        float invpi3halves = 1.0f/std::sqrtf(M_PI*M_PI*M_PI);
-
-        for(unsigned int i=0; i<totalAtoms; i++){
-            pvol = &pAtomicVolumes[i];
-            gaussian_radii[i] =  std::cbrt(*pvol * invpi3halves); // normalized to volume of water, looking at fractions of water volume
-        }
-    }
+    /*
+     * Convert the Gerstein-Voronoi atomic radii into Gaussian radii
+     *
+     */
+//    void setGaussianRadii(){
+//        auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
+//
+//        gaussian_radii.resize(totalAtoms);
+//        float * pvol;
+//        float invpi3halves = 1.0f/std::sqrtf(M_PI*M_PI*M_PI);
+//
+//        for(unsigned int i=0; i<totalAtoms; i++){
+//            pvol = &pAtomicVolumes[i];
+//            gaussian_radii[i] =  std::cbrt(*pvol * invpi3halves); // normalized to volume of water, looking at fractions of water volume
+//        }
+//    }
 
     /*
      * Gaussian volumes where v = r^3 * pi^3/2
@@ -246,6 +251,8 @@ public:
     void setFractionalVolumeAtQ(float q_val){
 
         fractionOccAtoms.resize(totalAtoms);
+
+        float * gaussian_radii = pdbModel.getAtomicGaussianRadii();
 
         float factor, diff, inv = 1.0f/(4*M_PI);
         float pw_vol = 29.9;
@@ -266,7 +273,6 @@ public:
         if (fractionOccAtoms.empty()){
             setFractionalVolume(29.9); // 29.9 volume for H2O
         }
-
         return fractionOccAtoms.data();
     }
 
@@ -283,6 +289,22 @@ public:
 
     void calculateExVolPartialAmplitudes(unsigned int lmax, unsigned int totalqvalues, std::vector<float> &qvalues,
                                          bool recalculate);
+
+
+    float calculateRg(){
+        const int * pAtomicNumbers = pdbModel.getAtomicNumberVec();
+        rg = 0;
+        for(unsigned int n=0; n < totalAtoms; n++){
+
+            float rval = rvalues[n];
+            rg += rval*rval; // unique atomic numbers
+        }
+        rg *= 1/(float)totalAtoms;
+        rg = std::sqrtf(rg);
+        return rg;
+    }
+
+    float getRg(){ return (rg ==0) ? this->calculateRg(): rg ;}
 
 };
 

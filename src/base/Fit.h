@@ -121,6 +121,7 @@ public:
                           AtomisticModel & model,
                           std::vector<float> &icalc,
                           const float * aP,  // particle amplitude
+                          const float *HP,
                           const float * aC,  // excluded volume
                           const float * aCXP // cross-term
                           );
@@ -141,9 +142,7 @@ public:
                                   std::vector<float> &norm_aCs,
                                   std::vector<float> &aXW_cross_term, unsigned int totalInWorkingSet);
 
-    void
-    writeBestModelToFile(std::vector<float> &qvalues, std::string filename, AtomisticModel &model, const float *aP,
-                         const float *aC, const float *aCXP);
+    void writeBestModelToFile(std::vector<float> &qvalues, std::string filename, AtomisticModel &model);
 
     void writeBestChiFreeModel(AtomisticModel &model,
                                const std::vector<unsigned int> &selectedIndices,

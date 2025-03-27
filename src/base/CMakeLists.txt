@@ -25,6 +25,8 @@ list(APPEND SOURCES
         Fit.cpp
         SBESJY.cpp
         Ensemble.cpp
+        Aligner.cpp
+        HCPGridModel.cpp
         )
 
 list(APPEND HEADERS
@@ -37,6 +39,9 @@ list(APPEND HEADERS
         Result.h
         SBESJY.h
         Ensemble.h
+        Aligner.h
+        SVD.h
+        HCPGridModel.h
         )
 
 add_library(${CMAKE_PROJECT_NAME}_lib STATIC ${SOURCES} ${HEADERS})

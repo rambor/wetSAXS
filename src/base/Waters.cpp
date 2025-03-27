@@ -23,6 +23,7 @@
 
 #include <random>
 #include "Waters.h"
+#include "sastools/Residues.h"
 
 Waters::Waters() {
     /*
@@ -57,6 +58,9 @@ Waters::Waters() {
     minima["rG"] = 2.83705f; // RNA
     minima["rU"] = 2.24522f; // RNA
 
+    gen = std::mt19937(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    randomIndex = std::uniform_int_distribution<int> (0,360); // guaranteed unbiased
+    randomBeta = std::uniform_int_distribution<int> (0,180); // guaranteed unbiased
     createBackbonesAndSideChains();
 }
 
@@ -236,177 +240,260 @@ void Waters::createBackbonesAndSideChains(){
     sideChains["VAL"].insert({"CG2",Coords(-2.2791,-0.0839,-0.0161,"CG2",1.0)});
 
     /*
-     * add nucleics
+     * add nucleics - center on C1'
+     *
      */
-    sideChains[" DA"].insert({"P",Coords(-0.4995,-3.9442,-2.3020,"P",1.0)});
-    sideChains[" DA"].insert({"OP1",Coords(0.0725,-4.6312,-3.4950,"OP1",1.0)});
-    sideChains[" DA"].insert({"OP2",Coords(-0.7975,-4.7732,-1.1100,"OP2",1.0)});
-    sideChains[" DA"].insert({"O5'",Coords(0.4835,-2.7762,-1.8460,"O5'",1.0)});
-    sideChains[" DA"].insert({"C5'",Coords(0.9215,-1.8032,-2.7890,"C5'",1.0)});
-    sideChains[" DA"].insert({"C4'",Coords(1.6335,-0.6932,-2.0630,"C4'",1.0)});
-    sideChains[" DA"].insert({"O4'",Coords(0.6665,0.0788,-1.3140,"O4'",1.0)});
-    sideChains[" DA"].insert({"C3'",Coords(2.6635,-1.1682,-1.0330,"C3'",1.0)});
-    sideChains[" DA"].insert({"O3'",Coords(3.7695,-0.2642,-1.0910,"O3'",1.0)});
-    sideChains[" DA"].insert({"C2'",Coords(1.9405,-1.0372,0.2830,"C2'",1.0)});
-    sideChains[" DA"].insert({"C1'",Coords(1.1765,0.2568,0.0160,"C1'",1.0)});
-    sideChains[" DA"].insert({"N9",Coords(0.0775,0.5448,0.9120,"N9",1.0)});
-    sideChains[" DA"].insert({"C8",Coords(-0.7025,-0.2962,1.6580,"C8",1.0)});
-    sideChains[" DA"].insert({"N7",Coords(-1.6725,0.3278,2.2820,"N7",1.0)});
-    sideChains[" DA"].insert({"C5",Coords(-1.5155,1.6708,1.9410,"C5",1.0)});
-    sideChains[" DA"].insert({"C6",Coords(-2.1875,2.8438,2.3250,"C6",1.0)});
-    sideChains[" DA"].insert({"N6",Coords(-3.2455,2.8758,3.1270,"N6",1.0)});
-    sideChains[" DA"].insert({"N1",Coords(-1.7255,3.9998,1.8170,"N1",1.0)});
-    sideChains[" DA"].insert({"C2",Coords(-0.6735,4.0048,1.0060,"C2",1.0)});
-    sideChains[" DA"].insert({"N3",Coords(0.0415,2.9608,0.5540,"N3",1.0)});
-    sideChains[" DA"].insert({"C4",Coords(-0.4265,1.8238,1.1210,"C4",1.0)});
-    sideChains[" DC"].insert({"P",Coords(0.3991,-3.3471,1.7177,"P",1.0)});
-    sideChains[" DC"].insert({"OP1",Coords(0.9611,-4.6721,1.3597,"OP1",1.0)});
-    sideChains[" DC"].insert({"OP2",Coords(0.9711,-2.6571,2.8837,"OP2",1.0)});
-    sideChains[" DC"].insert({"O5'",Coords(0.3981,-2.4031,0.4277,"O5'",1.0)});
-    sideChains[" DC"].insert({"C5'",Coords(1.4211,-2.5301,-0.5893,"C5'",1.0)});
-    sideChains[" DC"].insert({"C4'",Coords(1.9761,-1.1541,-0.9153,"C4'",1.0)});
-    sideChains[" DC"].insert({"O4'",Coords(0.9131,-0.3201,-1.4373,"O4'",1.0)});
-    sideChains[" DC"].insert({"C3'",Coords(2.5411,-0.4101,0.2437,"C3'",1.0)});
-    sideChains[" DC"].insert({"O3'",Coords(3.7001,0.3649,-0.0823,"O3'",1.0)});
-    sideChains[" DC"].insert({"C2'",Coords(1.4331,0.5289,0.6497,"C2'",1.0)});
-    sideChains[" DC"].insert({"C1'",Coords(0.8141,0.8769,-0.6943,"C1'",1.0)});
-    sideChains[" DC"].insert({"N1",Coords(-0.5749,1.2569,-0.6023,"N1",1.0)});
-    sideChains[" DC"].insert({"C2",Coords(-0.8669,2.6019,-0.3673,"C2",1.0)});
-    sideChains[" DC"].insert({"O2",Coords(0.0661,3.4039,-0.2613,"O2",1.0)});
-    sideChains[" DC"].insert({"N3",Coords(-2.1789,2.9529,-0.2733,"N3",1.0)});
-    sideChains[" DC"].insert({"C4",Coords(-3.1499,2.0489,-0.4053,"C4",1.0)});
-    sideChains[" DC"].insert({"N4",Coords(-4.4019,2.4499,-0.3023,"N4",1.0)});
-    sideChains[" DC"].insert({"C5",Coords(-2.8589,0.6779,-0.6273,"C5",1.0)});
-    sideChains[" DC"].insert({"C6",Coords(-1.5629,0.3299,-0.7243,"C6",1.0)});
-    sideChains[" DG"].insert({"P",Coords(0.3656,4.0151,-2.9567,"P",1.0)});
-    sideChains[" DG"].insert({"OP1",Coords(-0.5834,5.0801,-3.4077,"OP1",1.0)});
-    sideChains[" DG"].insert({"OP2",Coords(1.7496,4.3971,-2.5577,"OP2",1.0)});
-    sideChains[" DG"].insert({"O5'",Coords(-0.2254,3.2081,-1.7297,"O5'",1.0)});
-    sideChains[" DG"].insert({"C5'",Coords(-1.5884,2.7551,-1.7977,"C5'",1.0)});
-    sideChains[" DG"].insert({"C4'",Coords(-1.8954,2.0131,-0.5307,"C4'",1.0)});
-    sideChains[" DG"].insert({"O4'",Coords(-1.1984,0.7371,-0.5657,"O4'",1.0)});
-    sideChains[" DG"].insert({"C3'",Coords(-1.4004,2.7131,0.7383,"C3'",1.0)});
-    sideChains[" DG"].insert({"O3'",Coords(-2.4124,2.8251,1.7233,"O3'",1.0)});
-    sideChains[" DG"].insert({"C2'",Coords(-0.2764,1.8331,1.2243,"C2'",1.0)});
-    sideChains[" DG"].insert({"C1'",Coords(-0.6854,0.4631,0.7343,"C1'",1.0)});
-    sideChains[" DG"].insert({"N9",Coords(0.3716,-0.5089,0.5693,"N9",1.0)});
-    sideChains[" DG"].insert({"C8",Coords(1.6166,-0.3199,0.0343,"C8",1.0)});
-    sideChains[" DG"].insert({"N7",Coords(2.3216,-1.4019,-0.0317,"N7",1.0)});
-    sideChains[" DG"].insert({"C5",Coords(1.4806,-2.4009,0.4473,"C5",1.0)});
-    sideChains[" DG"].insert({"C6",Coords(1.6906,-3.7999,0.6503,"C6",1.0)});
-    sideChains[" DG"].insert({"O6",Coords(2.6906,-4.4669,0.3493,"O6",1.0)});
-    sideChains[" DG"].insert({"N1",Coords(0.5936,-4.4299,1.2293,"N1",1.0)});
-    sideChains[" DG"].insert({"C2",Coords(-0.5724,-3.7859,1.5713,"C2",1.0)});
-    sideChains[" DG"].insert({"N2",Coords(-1.5194,-4.5709,2.1003,"N2",1.0)});
-    sideChains[" DG"].insert({"N3",Coords(-0.8024,-2.4959,1.3583,"N3",1.0)});
-    sideChains[" DG"].insert({"C4",Coords(0.2796,-1.8599,0.8483,"C4",1.0)});
-    sideChains[" DT"].insert({"P",Coords(-1.8285,3.1266,0.1304,"P",1.0)});
-    sideChains[" DT"].insert({"OP1",Coords(-2.9125,3.7846,0.8844,"OP1",1.0)});
-    sideChains[" DT"].insert({"OP2",Coords(-0.4465,3.6167,0.3204,"OP2",1.0)});
-    sideChains[" DT"].insert({"O5'",Coords(-1.8055,1.5766,0.4734,"O5'",1.0)});
-    sideChains[" DT"].insert({"C5'",Coords(-2.9225,0.7286,0.2504,"C5'",1.0)});
-    sideChains[" DT"].insert({"C4'",Coords(-2.5455,-0.6944,0.6204,"C4'",1.0)});
-    sideChains[" DT"].insert({"O4'",Coords(-1.4535,-1.1464,-0.2066,"O4'",1.0)});
-    sideChains[" DT"].insert({"C3'",Coords(-2.0705,-0.8824,2.0574,"C3'",1.0)});
-    sideChains[" DT"].insert({"O3'",Coords(-2.6215,-2.1244,2.4834,"O3'",1.0)});
-    sideChains[" DT"].insert({"C2'",Coords(-0.5705,-0.8974,1.9354,"C2'",1.0)});
-    sideChains[" DT"].insert({"C1'",Coords(-0.3405,-1.5454,0.5914,"C1'",1.0)});
-    sideChains[" DT"].insert({"N1",Coords(0.8845,-1.1274,-0.0946,"N1",1.0)});
-    sideChains[" DT"].insert({"C2",Coords(1.7195,-2.0884,-0.6076,"C2",1.0)});
-    sideChains[" DT"].insert({"O2",Coords(1.5835,-3.2934,-0.4006,"O2",1.0)});
-    sideChains[" DT"].insert({"N3",Coords(2.7325,-1.6284,-1.4026,"N3",1.0)});
-    sideChains[" DT"].insert({"C4",Coords(3.0215,-0.3154,-1.7026,"C4",1.0)});
-    sideChains[" DT"].insert({"O4",Coords(4.0015,-0.0584,-2.3976,"O4",1.0)});
-    sideChains[" DT"].insert({"C5",Coords(2.1115,0.6526,-1.1426,"C5",1.0)});
-    sideChains[" DT"].insert({"C7",Coords(2.3805,2.1086,-1.3686,"C7",1.0)});
-    sideChains[" DT"].insert({"C6",Coords(1.0825,0.2066,-0.4236,"C6",1.0)});
-    sideChains[" rA"].insert({"P",Coords(2.0505,1.9103,-3.6766,"P",1.0)});
-    sideChains[" rA"].insert({"OP1",Coords(1.8505,1.4763,-5.1006,"OP1",1.0)});
-    sideChains[" rA"].insert({"OP2",Coords(2.8375,3.1193,-3.3926,"OP2",1.0)});
-    sideChains[" rA"].insert({"O5'",Coords(0.5875,1.9923,-3.0616,"O5'",1.0)});
-    sideChains[" rA"].insert({"C5'",Coords(0.2605,2.8263,-1.9476,"C5'",1.0)});
-    sideChains[" rA"].insert({"C4'",Coords(-0.8545,2.1893,-1.1196,"C4'",1.0)});
-    sideChains[" rA"].insert({"O4'",Coords(-0.4985,0.8523,-0.7396,"O4'",1.0)});
-    sideChains[" rA"].insert({"C3'",Coords(-1.2065,2.9593,0.1624,"C3'",1.0)});
-    sideChains[" rA"].insert({"O3'",Coords(-2.6415,3.0063,0.2684,"O3'",1.0)});
-    sideChains[" rA"].insert({"C2'",Coords(-0.8455,2.0163,1.3064,"C2'",1.0)});
-    sideChains[" rA"].insert({"O2'",Coords(-1.7575,2.0023,2.3794,"O2'",1.0)});
-    sideChains[" rA"].insert({"C1'",Coords(-0.8705,0.6643,0.6004,"C1'",1.0)});
-    sideChains[" rA"].insert({"N9",Coords(-0.0925,-0.4037,1.1904,"N9",1.0)});
-    sideChains[" rA"].insert({"C8",Coords(0.9965,-0.3517,2.0134,"C8",1.0)});
-    sideChains[" rA"].insert({"N7",Coords(1.4285,-1.5287,2.3914,"N7",1.0)});
-    sideChains[" rA"].insert({"C5",Coords(0.5595,-2.4087,1.7684,"C5",1.0)});
-    sideChains[" rA"].insert({"C6",Coords(0.4775,-3.8007,1.7754,"C6",1.0)});
-    sideChains[" rA"].insert({"N6",Coords(1.3175,-4.5707,2.4504,"N6",1.0)});
-    sideChains[" rA"].insert({"N1",Coords(-0.5055,-4.3757,1.0554,"N1",1.0)});
-    sideChains[" rA"].insert({"C2",Coords(-1.3465,-3.5847,0.3704,"C2",1.0)});
-    sideChains[" rA"].insert({"N3",Coords(-1.3725,-2.2587,0.2854,"N3",1.0)});
-    sideChains[" rA"].insert({"C4",Coords(-0.3755,-1.7307,1.0214,"C4",1.0)});
-    sideChains[" rC"].insert({"P",Coords(2.2922,2.6740,1.5097,"P",1.0)});
-    sideChains[" rC"].insert({"OP1",Coords(2.0632,3.9129,2.3257,"OP1",1.0)});
-    sideChains[" rC"].insert({"OP2",Coords(3.0612,1.5729,2.0677,"OP2",1.0)});
-    sideChains[" rC"].insert({"O5'",Coords(0.8802,2.0759,1.0667,"O5'",1.0)});
-    sideChains[" rC"].insert({"C5'",Coords(-0.0908,2.8959,0.4517,"C5'",1.0)});
-    sideChains[" rC"].insert({"C4'",Coords(-1.1358,2.0319,-0.1853,"C4'",1.0)});
-    sideChains[" rC"].insert({"O4'",Coords(-0.4788,1.2099,-1.1753,"O4'",1.0)});
-    sideChains[" rC"].insert({"C3'",Coords(-1.7838,1.0140,0.7417,"C3'",1.0)});
-    sideChains[" rC"].insert({"O3'",Coords(-2.8258,1.6180,1.5107,"O3'",1.0)});
-    sideChains[" rC"].insert({"C2'",Coords(-2.3258,0.0190,-0.2703,"C2'",1.0)});
-    sideChains[" rC"].insert({"O2'",Coords(-3.4908,0.5329,-0.9193,"O2'",1.0)});
-    sideChains[" rC"].insert({"C1'",Coords(-1.1368,-0.0551,-1.2443,"C1'",1.0)});
-    sideChains[" rC"].insert({"N1",Coords(-0.1638,-1.1071,-0.9003,"N1",1.0)});
-    sideChains[" rC"].insert({"C2",Coords(-0.4498,-2.4031,-1.3273,"C2",1.0)});
-    sideChains[" rC"].insert({"O2",Coords(-1.5098,-2.5811,-1.9583,"O2",1.0)});
-    sideChains[" rC"].insert({"N3",Coords(0.4042,-3.4061,-1.0543,"N3",1.0)});
-    sideChains[" rC"].insert({"C4",Coords(1.5272,-3.1541,-0.3783,"C4",1.0)});
-    sideChains[" rC"].insert({"N4",Coords(2.3342,-4.1751,-0.1593,"N4",1.0)});
-    sideChains[" rC"].insert({"C5",Coords(1.8512,-1.8291,0.0917,"C5",1.0)});
-    sideChains[" rC"].insert({"C6",Coords(0.9782,-0.8471,-0.1933,"C6",1.0)});
-    sideChains[" rG"].insert({"P",Coords(-1.8214,4.4453,0.1367,"P",1.0)});
-    sideChains[" rG"].insert({"OP1",Coords(-3.0364,5.0523,0.7317,"OP1",1.0)});
-    sideChains[" rG"].insert({"OP2",Coords(-0.4834,4.8353,0.6097,"OP2",1.0)});
-    sideChains[" rG"].insert({"O5'",Coords(-1.8764,2.8613,0.2327,"O5'",1.0)});
-    sideChains[" rG"].insert({"C5'",Coords(-3.0684,2.1593,-0.1283,"C5'",1.0)});
-    sideChains[" rG"].insert({"C4'",Coords(-2.8154,0.6813,-0.1063,"C4'",1.0)});
-    sideChains[" rG"].insert({"O4'",Coords(-1.7564,0.3243,-1.0533,"O4'",1.0)});
-    sideChains[" rG"].insert({"C3'",Coords(-2.2214,0.2013,1.1967,"C3'",1.0)});
-    sideChains[" rG"].insert({"O3'",Coords(-3.2694,0.1423,2.1577,"O3'",1.0)});
-    sideChains[" rG"].insert({"C2'",Coords(-1.6644,-1.1607,0.7797,"C2'",1.0)});
-    sideChains[" rG"].insert({"O2'",Coords(-2.7104,-2.1427,0.6647,"O2'",1.0)});
-    sideChains[" rG"].insert({"C1'",Coords(-1.0614,-0.8077,-0.5863,"C1'",1.0)});
-    sideChains[" rG"].insert({"N9",Coords(0.3596,-0.4777,-0.4893,"N9",1.0)});
-    sideChains[" rG"].insert({"C8",Coords(0.9406,0.7613,-0.4313,"C8",1.0)});
-    sideChains[" rG"].insert({"N7",Coords(2.2436,0.6993,-0.4023,"N7",1.0)});
-    sideChains[" rG"].insert({"C5",Coords(2.5356,-0.6437,-0.4183,"C5",1.0)});
-    sideChains[" rG"].insert({"C6",Coords(3.7526,-1.3067,-0.3733,"C6",1.0)});
-    sideChains[" rG"].insert({"O6",Coords(4.8886,-0.8297,-0.3313,"O6",1.0)});
-    sideChains[" rG"].insert({"N1",Coords(3.5996,-2.6657,-0.3763,"N1",1.0)});
-    sideChains[" rG"].insert({"C2",Coords(2.3986,-3.3427,-0.4313,"C2",1.0)});
-    sideChains[" rG"].insert({"N2",Coords(2.4426,-4.6577,-0.4563,"N2",1.0)});
-    sideChains[" rG"].insert({"N3",Coords(1.2416,-2.7327,-0.4663,"N3",1.0)});
-    sideChains[" rG"].insert({"C4",Coords(1.3816,-1.3947,-0.4603,"C4",1.0)});
-    sideChains[" rU"].insert({"P",Coords(-3.2431,2.0657,-0.4487,"P",1.0)});
-    sideChains[" rU"].insert({"OP1",Coords(-4.5471,2.2078,0.2153,"OP1",1.0)});
-    sideChains[" rU"].insert({"OP2",Coords(-2.2751,3.1598,-0.3757,"OP2",1.0)});
-    sideChains[" rU"].insert({"O5'",Coords(-2.5061,0.7487,0.0603,"O5'",1.0)});
-    sideChains[" rU"].insert({"C5'",Coords(-3.0681,-0.5743,-0.1087,"C5'",1.0)});
-    sideChains[" rU"].insert({"C4'",Coords(-2.0031,-1.5802,0.2773,"C4'",1.0)});
-    sideChains[" rU"].insert({"O4'",Coords(-0.8541,-1.3462,-0.5647,"O4'",1.0)});
-    sideChains[" rU"].insert({"C3'",Coords(-1.5691,-1.3483,1.7303,"C3'",1.0)});
-    sideChains[" rU"].insert({"O3'",Coords(-1.3651,-2.6412,2.3523,"O3'",1.0)});
-    sideChains[" rU"].insert({"C2'",Coords(-0.2071,-0.6863,1.5923,"C2'",1.0)});
-    sideChains[" rU"].insert({"O2'",Coords(0.7069,-0.8663,2.6543,"O2'",1.0)});
-    sideChains[" rU"].insert({"C1'",Coords(0.2849,-1.2363,0.2443,"C1'",1.0)});
-    sideChains[" rU"].insert({"N1",Coords(1.2789,-0.4022,-0.4287,"N1",1.0)});
-    sideChains[" rU"].insert({"C2",Coords(2.5039,-0.9902,-0.7467,"C2",1.0)});
-    sideChains[" rU"].insert({"O2",Coords(2.7309,-2.1853,-0.6687,"O2",1.0)});
-    sideChains[" rU"].insert({"N3",Coords(3.4539,-0.1223,-1.1467,"N3",1.0)});
-    sideChains[" rU"].insert({"C4",Coords(3.3179,1.2308,-1.3167,"C4",1.0)});
-    sideChains[" rU"].insert({"O4",Coords(4.3109,1.8878,-1.6157,"O4",1.0)});
-    sideChains[" rU"].insert({"C5",Coords(2.0039,1.7498,-1.0637,"C5",1.0)});
-    sideChains[" rU"].insert({"C6",Coords(1.0449,0.9288,-0.6417,"C6",1.0)});
+// total models used :: 52
+     centeringAtoms["DA"] = "C1'";
+//    sideChains["DA"].insert({"P",Coords(-3.7834,-1.1321,3.1716,"P", 1.0)});
+//    sideChains["DA"].insert({"OP1",Coords(-3.9316,-2.3331,4.0326,"OP1", 1.0)});
+//    sideChains["DA"].insert({"OP2",Coords(-3.9939,0.2170,3.7521,"OP2", 1.0)});
+//    sideChains["DA"].insert({"O5'",Coords(-2.3354,-1.1802,2.5093,"O5'", 1.0)});
+//    sideChains["DA"].insert({"C5'",Coords(-1.9156,-2.3251,1.7715,"C5'", 1.0)});
+//    sideChains["DA"].insert({"C4'",Coords(-0.6777,-2.0131,0.9647,"C4'", 1.0)});
+//    sideChains["DA"].insert({"O4'",Coords(-0.9781,-1.0233,-0.0494,"O4'", 1.0)});
+//    sideChains["DA"].insert({"C3'",Coords(0.5373,-1.4670,1.7376,"C3'", 1.0)});
+//    sideChains["DA"].insert({"O3'",Coords(1.6305,-2.0623,1.0310,"O3'", 1.0)});
+//    sideChains["DA"].insert({"C2'",Coords(0.4758,0.0194,1.4374,"C2'", 1.0)});
+//    sideChains["DA"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["DA"].insert({"N9",Coords(-0.6163,1.2378,-0.4736,"N9", 1.0)});
+    sideChains["DA"].insert({"C8",Coords(-1.4800,2.0752,0.1883,"C8", 1.0)});
+    sideChains["DA"].insert({"N7",Coords(-1.8648,3.1067,-0.5244,"N7", 1.0)});
+    sideChains["DA"].insert({"C5",Coords(-1.2085,2.9383,-1.7363,"C5", 1.0)});
+    sideChains["DA"].insert({"C6",Coords(-1.1975,3.6935,-2.9224,"C6", 1.0)});
+    sideChains["DA"].insert({"N6",Coords(-1.8961,4.8179,-3.0914,"N6", 1.0)});
+    sideChains["DA"].insert({"N1",Coords(-0.4356,3.2469,-3.9432,"N1", 1.0)});
+    sideChains["DA"].insert({"C2",Coords(0.2629,2.1172,-3.7755,"C2", 1.0)});
+    sideChains["DA"].insert({"N3",Coords(0.3336,1.3211,-2.7130,"N3", 1.0)});
+    sideChains["DA"].insert({"C4",Coords(-0.4344,1.7928,-1.7167,"C4", 1.0)});
+
+    // total models used :: 98
+    centeringAtoms["DC"] = "C1'";
+//    sideChains["DC"].insert({"P",Coords(2.6615,-0.9099,2.7762,"P", 1.0)});
+//    sideChains["DC"].insert({"OP1",Coords(2.7370,0.2994,3.5904,"OP1", 1.0)});
+//    sideChains["DC"].insert({"OP2",Coords(2.0248,-2.1033,3.3144,"OP2", 1.0)});
+//    sideChains["DC"].insert({"O5'",Coords(1.9100,-0.5379,1.3914,"O5'", 1.0)});
+//    sideChains["DC"].insert({"C5'",Coords(0.4748,-0.3031,1.3932,"C5'", 1.0)});
+//    sideChains["DC"].insert({"C4'",Coords(0.0000,0.0000,0.0000,"C4'", 1.0)});
+//    sideChains["DC"].insert({"O4'",Coords(0.4376,1.3393,-0.2899,"O4'", 1.0)});
+//    sideChains["DC"].insert({"C3'",Coords(0.5804,-0.8694,-1.1334,"C3'", 1.0)});
+//    sideChains["DC"].insert({"O3'",Coords(-0.4206,-1.0303,-2.1199,"O3'", 1.0)});
+//    sideChains["DC"].insert({"C2'",Coords(1.7182,-0.0076,-1.6954,"C2'", 1.0)});
+//    sideChains["DC"].insert({"C1'",Coords(1.1034,1.3867,-1.5341,"C1'", 1.0)});
+    sideChains["DC"].insert({"N1",Coords(2.1457,2.4507,-1.4607,"N1", 1.0)});
+    sideChains["DC"].insert({"C2",Coords(2.5596,3.0597,-2.6338,"C2", 1.0)});
+    sideChains["DC"].insert({"O2",Coords(1.9967,2.7290,-3.6808,"O2", 1.0)});
+    sideChains["DC"].insert({"N3",Coords(3.5130,4.0095,-2.5649,"N3", 1.0)});
+    sideChains["DC"].insert({"C4",Coords(4.1059,4.3450,-1.4145,"C4", 1.0)});
+    sideChains["DC"].insert({"N4",Coords(5.0814,5.2734,-1.4526,"N4", 1.0)});
+    sideChains["DC"].insert({"C5",Coords(3.7441,3.6935,-0.2047,"C5", 1.0)});
+    sideChains["DC"].insert({"C6",Coords(2.7570,2.7863,-0.2907,"C6", 1.0)});
+
+    // total models used :: 123
+    centeringAtoms["DG"] = "C1'";
+//    sideChains["DG"].insert({"P",Coords(-5.3892,1.4224,-0.6462,"P", 1.0)});
+//    sideChains["DG"].insert({"OP1",Coords(-5.9068,0.8283,-1.9037,"OP1", 1.0)});
+//    sideChains["DG"].insert({"OP2",Coords(-6.3033,1.6057,0.5091,"OP2", 1.0)});
+//    sideChains["DG"].insert({"O5'",Coords(-4.1469,0.5485,-0.1688,"O5'", 1.0)});
+//    sideChains["DG"].insert({"C5'",Coords(-3.3172,0.9848,0.9073,"C5'", 1.0)});
+//    sideChains["DG"].insert({"C4'",Coords(-2.1103,0.0853,1.0314,"C4'", 1.0)});
+//    sideChains["DG"].insert({"O4'",Coords(-1.3986,0.0552,-0.2214,"O4'", 1.0)});
+//    sideChains["DG"].insert({"C3'",Coords(-1.1073,0.5050,2.0955,"C3'", 1.0)});
+//    sideChains["DG"].insert({"O3'",Coords(-1.4250,-0.2662,3.2617,"O3'", 1.0)});
+//    sideChains["DG"].insert({"C2'",Coords(0.2364,0.1060,1.5058,"C2'", 1.0)});
+//    sideChains["DG"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["DG"].insert({"N9",Coords(0.6112,1.0526,-0.8052,"N9", 1.0)});
+    sideChains["DG"].insert({"C8",Coords(1.4635,0.8898,-1.8711,"C8", 1.0)});
+    sideChains["DG"].insert({"N7",Coords(1.8294,2.0198,-2.4119,"N7", 1.0)});
+    sideChains["DG"].insert({"C5",Coords(1.1835,2.9882,-1.6550,"C5", 1.0)});
+    sideChains["DG"].insert({"C6",Coords(1.1912,4.4025,-1.7696,"C6", 1.0)});
+    sideChains["DG"].insert({"O6",Coords(1.7907,5.1060,-2.5926,"O6", 1.0)});
+    sideChains["DG"].insert({"N1",Coords(0.3981,4.9985,-0.7949,"N1", 1.0)});
+    sideChains["DG"].insert({"C2",Coords(-0.3132,4.3239,0.1652,"C2", 1.0)});
+    sideChains["DG"].insert({"N2",Coords(-1.0204,5.0800,1.0187,"N2", 1.0)});
+    sideChains["DG"].insert({"N3",Coords(-0.3324,3.0070,0.2815,"N3", 1.0)});
+    sideChains["DG"].insert({"C4",Coords(0.4322,2.4070,-0.6551,"C4", 1.0)});
+
+    // total models used :: 48
+    centeringAtoms["DT"] = "C1'";
+//    sideChains["DT"].insert({"P",Coords(0.2077,-4.8901,1.8154,"P", 1.0)});
+//    sideChains["DT"].insert({"OP1",Coords(0.5055,-4.2532,3.1236,"OP1", 1.0)});
+//    sideChains["DT"].insert({"OP2",Coords(-0.6843,-6.0759,1.7626,"OP2", 1.0)});
+//    sideChains["DT"].insert({"O5'",Coords(-0.3787,-3.7657,0.8507,"O5'", 1.0)});
+//    sideChains["DT"].insert({"C5'",Coords(-1.5505,-3.0343,1.2124,"C5'", 1.0)});
+//    sideChains["DT"].insert({"C4'",Coords(-1.5498,-1.6778,0.5460,"C4'", 1.0)});
+//    sideChains["DT"].insert({"O4'",Coords(-0.4193,-0.9102,1.0101,"O4'", 1.0)});
+//    sideChains["DT"].insert({"C3'",Coords(-1.4020,-1.6906,-0.9813,"C3'", 1.0)});
+//    sideChains["DT"].insert({"O3'",Coords(-2.6956,-1.7804,-1.5878,"O3'", 1.0)});
+//    sideChains["DT"].insert({"C2'",Coords(-0.7797,-0.3361,-1.2708,"C2'", 1.0)});
+//    sideChains["DT"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["DT"].insert({"N1",Coords(1.4624,-0.1211,-0.1367,"N1", 1.0)});
+    sideChains["DT"].insert({"C2",Coords(2.1765,0.9990,-0.4979,"C2", 1.0)});
+    sideChains["DT"].insert({"O2",Coords(1.6572,2.0825,-0.7117,"O2", 1.0)});
+    sideChains["DT"].insert({"N3",Coords(3.5320,0.8031,-0.5983,"N3", 1.0)});
+    sideChains["DT"].insert({"C4",Coords(4.2244,-0.3724,-0.3805,"C4", 1.0)});
+    sideChains["DT"].insert({"O4",Coords(5.4457,-0.3960,-0.5079,"O4", 1.0)});
+    sideChains["DT"].insert({"C5",Coords(3.4109,-1.5070,-0.0078,"C5", 1.0)});
+    sideChains["DT"].insert({"C7",Coords(4.0731,-2.8235,0.2471,"C7", 1.0)});
+    sideChains["DT"].insert({"C6",Coords(2.0885,-1.3261,0.0936,"C6", 1.0)});
+
+    // total models used :: 148
+    centeringAtoms["rA"] = "C1'";
+//    sideChains["rA"].insert({"P",Coords(-0.2426,-0.4658,-5.2875,"P", 1.0)});
+//    sideChains["rA"].insert({"OP1",Coords(-0.2850,-1.7679,-5.9889,"OP1", 1.0)});
+//    sideChains["rA"].insert({"OP2",Coords(-1.2687,0.5539,-5.5850,"OP2", 1.0)});
+//    sideChains["rA"].insert({"O5'",Coords(-0.2675,-0.7078,-3.7084,"O5'", 1.0)});
+//    sideChains["rA"].insert({"C5'",Coords(0.4972,-1.7366,-3.0964,"C5'", 1.0)});
+//    sideChains["rA"].insert({"C4'",Coords(0.2525,-1.6959,-1.6010,"C4'", 1.0)});
+//    sideChains["rA"].insert({"O4'",Coords(0.8199,-0.4860,-1.0430,"O4'", 1.0)});
+//    sideChains["rA"].insert({"C3'",Coords(-1.2121,-1.6295,-1.2087,"C3'", 1.0)});
+//    sideChains["rA"].insert({"O3'",Coords(-1.7388,-2.9429,-1.2071,"O3'", 1.0)});
+//    sideChains["rA"].insert({"C2'",Coords(-1.1230,-1.0185,0.1860,"C2'", 1.0)});
+//    sideChains["rA"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["rA"].insert({"N9",Coords(-0.5477,1.2937,-0.3901,"N9", 1.0)});
+    sideChains["rA"].insert({"C8",Coords(-0.8524,1.6942,-1.6626,"C8", 1.0)});
+    sideChains["rA"].insert({"N7",Coords(-1.3653,2.8971,-1.7261,"N7", 1.0)});
+    sideChains["rA"].insert({"C5",Coords(-1.4064,3.3028,-0.4045,"C5", 1.0)});
+    sideChains["rA"].insert({"C6",Coords(-1.8468,4.4956,0.1873,"C6", 1.0)});
+    sideChains["rA"].insert({"N6",Coords(-2.3410,5.5079,-0.5327,"N6", 1.0)});
+    sideChains["rA"].insert({"N1",Coords(-1.7619,4.5996,1.5285,"N1", 1.0)});
+    sideChains["rA"].insert({"C2",Coords(-1.2588,3.5695,2.2200,"C2", 1.0)});
+    sideChains["rA"].insert({"N3",Coords(-0.8096,2.3954,1.7746,"N3", 1.0)});
+    sideChains["rA"].insert({"C4",Coords(-0.9111,2.3291,0.4378,"C4", 1.0)});
+
+    // total models used :: 161
+    centeringAtoms["rC"] = "C1'";
+//    sideChains["CYT"].insert({"P",Coords(-1.1349,-5.2231,0.1749,"P", 1.0)});
+//    sideChains["CYT"].insert({"OP1",Coords(-0.2958,-6.2931,-0.4376,"OP1", 1.0)});
+//    sideChains["CYT"].insert({"OP2",Coords(-1.5456,-5.3702,1.5762,"OP2", 1.0)});
+//    sideChains["CYT"].insert({"O5'",Coords(-0.4386,-3.8143,-0.0160,"O5'", 1.0)});
+//    sideChains["CYT"].insert({"C5'",Coords(0.0044,-3.3653,-1.2797,"C5'", 1.0)});
+//    sideChains["CYT"].insert({"C4'",Coords(0.5261,-1.9538,-1.1909,"C4'", 1.0)});
+//    sideChains["CYT"].insert({"O4'",Coords(-0.5404,-1.0606,-0.7726,"O4'", 1.0)});
+//    sideChains["CYT"].insert({"C3'",Coords(1.6081,-1.7002,-0.1512,"C3'", 1.0)});
+//    sideChains["CYT"].insert({"O3'",Coords(2.8956,-2.1506,-0.5522,"O3'", 1.0)});
+//    sideChains["CYT"].insert({"C2'",Coords(1.5091,-0.1934,0.0374,"C2'", 1.0)});
+//    sideChains["CYT"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["CYT"].insert({"N1",Coords(-0.5794,-0.0537,1.3552,"N1", 1.0)});
+    sideChains["CYT"].insert({"C2",Coords(-0.4380,1.1006,2.1377,"C2", 1.0)});
+    sideChains["CYT"].insert({"O2",Coords(0.1336,2.0803,1.6314,"O2", 1.0)});
+    sideChains["CYT"].insert({"N3",Coords(-0.9473,1.0821,3.3972,"N3", 1.0)});
+    sideChains["CYT"].insert({"C4",Coords(-1.5532,-0.0221,3.8647,"C4", 1.0)});
+    sideChains["CYT"].insert({"N4",Coords(-2.0557,0.0193,5.1057,"N4", 1.0)});
+    sideChains["CYT"].insert({"C5",Coords(-1.7043,-1.2074,3.0753,"C5", 1.0)});
+    sideChains["CYT"].insert({"C6",Coords(-1.1942,-1.1866,1.8370,"C6", 1.0)});
+
+    // total models used :: 252
+    centeringAtoms["rG"] = "C1'";
+//    sideChains["rG"].insert({"P",Coords(-1.6626,4.1606,-2.4487,"P", 1.0)});
+//    sideChains["rG"].insert({"OP1",Coords(-3.0618,4.6169,-2.5771,"OP1", 1.0)});
+//    sideChains["rG"].insert({"OP2",Coords(-0.6094,5.1543,-2.1564,"OP2", 1.0)});
+//    sideChains["rG"].insert({"O5'",Coords(-1.5853,2.9735,-1.4027,"O5'", 1.0)});
+//    sideChains["rG"].insert({"C5'",Coords(-2.5535,1.9397,-1.3839,"C5'", 1.0)});
+//    sideChains["rG"].insert({"C4'",Coords(-2.1403,0.8663,-0.4218,"C4'", 1.0)});
+//    sideChains["rG"].insert({"O4'",Coords(-1.0035,0.1568,-0.9717,"O4'", 1.0)});
+//    sideChains["rG"].insert({"C3'",Coords(-1.6815,1.3777,0.9434,"C3'", 1.0)});
+//    sideChains["rG"].insert({"O3'",Coords(-2.7537,1.4344,1.8689,"O3'", 1.0)});
+//    sideChains["rG"].insert({"C2'",Coords(-0.5902,0.3991,1.3501,"C2'", 1.0)});
+//    sideChains["rG"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["rG"].insert({"N9",Coords(1.1562,0.8347,-0.3917,"N9", 1.0)});
+    sideChains["rG"].insert({"C8",Coords(1.2781,1.5484,-1.5683,"C8", 1.0)});
+    sideChains["rG"].insert({"N7",Coords(2.4122,2.1736,-1.6966,"N7", 1.0)});
+    sideChains["rG"].insert({"C5",Coords(3.1189,1.8356,-0.5333,"C5", 1.0)});
+    sideChains["rG"].insert({"C6",Coords(4.4313,2.2242,-0.1164,"C6", 1.0)});
+    sideChains["rG"].insert({"O6",Coords(5.2502,2.9430,-0.7322,"O6", 1.0)});
+    sideChains["rG"].insert({"N1",Coords(4.7470,1.6313,1.1021,"N1", 1.0)});
+    sideChains["rG"].insert({"C2",Coords(3.9006,0.8269,1.8321,"C2", 1.0)});
+    sideChains["rG"].insert({"N2",Coords(4.3813,0.3582,2.9956,"N2", 1.0)});
+    sideChains["rG"].insert({"N3",Coords(2.6746,0.4657,1.4568,"N3", 1.0)});
+    sideChains["rG"].insert({"C4",Coords(2.3615,0.9979,0.2638,"C4", 1.0)});
+
+
+    // total models used :: 116
+    centeringAtoms["rU"] = "C1'";
+//    sideChains["rU"].insert({"P",Coords(-4.9480,-0.9853,1.6931,"P", 1.0)});
+//    sideChains["rU"].insert({"OP1",Coords(-5.3497,-2.3727,2.0213,"OP1", 1.0)});
+//    sideChains["rU"].insert({"OP2",Coords(-5.0768,0.0621,2.7379,"OP2", 1.0)});
+//    sideChains["rU"].insert({"O5'",Coords(-3.4634,-0.9704,1.1126,"O5'", 1.0)});
+//    sideChains["rU"].insert({"C5'",Coords(-3.0815,-1.7942,0.0242,"C5'", 1.0)});
+//    sideChains["rU"].insert({"C4'",Coords(-1.5997,-1.6964,-0.2354,"C4'", 1.0)});
+//    sideChains["rU"].insert({"O4'",Coords(-1.2498,-0.3271,-0.5626,"O4'", 1.0)});
+//    sideChains["rU"].insert({"C3'",Coords(-0.7034,-2.0424,0.9460,"C3'", 1.0)});
+//    sideChains["rU"].insert({"O3'",Coords(-0.4743,-3.4285,1.0643,"O3'", 1.0)});
+//    sideChains["rU"].insert({"C2'",Coords(0.5624,-1.2480,0.6653,"C2'", 1.0)});
+//    sideChains["rU"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["rU"].insert({"N1",Coords(-0.1779,1.1400,0.9375,"N1", 1.0)});
+    sideChains["rU"].insert({"C2",Coords(0.9527,1.8163,1.3541,"C2", 1.0)});
+    sideChains["rU"].insert({"O2",Coords(2.0645,1.4433,1.0247,"O2", 1.0)});
+    sideChains["rU"].insert({"N3",Coords(0.7407,2.9089,2.1765,"N3", 1.0)});
+    sideChains["rU"].insert({"C4",Coords(-0.4840,3.3943,2.6058,"C4", 1.0)});
+    sideChains["rU"].insert({"O4",Coords(-0.5393,4.3980,3.3216,"O4", 1.0)});
+    sideChains["rU"].insert({"C5",Coords(-1.6018,2.6485,2.1151,"C5", 1.0)});
+    sideChains["rU"].insert({"C6",Coords(-1.4154,1.5879,1.3199,"C6", 1.0)});
+
+    // total models used :: 8
+    centeringAtoms["rI"] = "C1'";
+//    sideChains["rI"].insert({"P",Coords(-4.0551,1.3171,3.1999,"P", 1.0)});
+//    sideChains["rI"].insert({"OP1",Coords(-3.9486,2.1747,4.3919,"OP1", 1.0)});
+//    sideChains["rI"].insert({"OP2",Coords(-5.2299,1.4569,2.3068,"OP2", 1.0)});
+//    sideChains["rI"].insert({"O5'",Coords(-2.7229,1.1124,2.3356,"O5'", 1.0)});
+//    sideChains["rI"].insert({"C5'",Coords(-1.4998,1.5638,2.8689,"C5'", 1.0)});
+//    sideChains["rI"].insert({"C4'",Coords(-0.3549,1.2799,1.9077,"C4'", 1.0)});
+//    sideChains["rI"].insert({"O4'",Coords(-0.4740,-0.0083,1.3344,"O4'", 1.0)});
+//    sideChains["rI"].insert({"C3'",Coords(-0.3305,2.2464,0.7367,"C3'", 1.0)});
+//    sideChains["rI"].insert({"O3'",Coords(0.4047,3.4106,1.0309,"O3'", 1.0)});
+//    sideChains["rI"].insert({"C2'",Coords(0.3508,1.4387,-0.3483,"C2'", 1.0)});
+//    sideChains["rI"].insert({"C1'",Coords(0.0000,0.0000,0.0000,"C1'", 1.0)});
+    sideChains["rI"].insert({"N9",Coords(-1.0519,-0.4535,-0.9274,"N9", 1.0)});
+    sideChains["rI"].insert({"C8",Coords(-2.3850,-0.6097,-0.6518,"C8", 1.0)});
+    sideChains["rI"].insert({"N7",Coords(-3.0087,-1.0380,-1.7730,"N7", 1.0)});
+    sideChains["rI"].insert({"C5",Coords(-2.0913,-1.1540,-2.7578,"C5", 1.0)});
+    sideChains["rI"].insert({"C6",Coords(-2.1748,-1.5459,-4.0847,"C6", 1.0)});
+    sideChains["rI"].insert({"O6",Coords(-3.2560,-1.8795,-4.5686,"O6", 1.0)});
+    sideChains["rI"].insert({"N1",Coords(-1.0320,-1.5629,-4.8593,"N1", 1.0)});
+    sideChains["rI"].insert({"C2",Coords(0.1603,-1.1985,-4.3244,"C2", 1.0)});
+    sideChains["rI"].insert({"N3",Coords(0.2461,-0.8119,-3.0273,"N3", 1.0)});
+    sideChains["rI"].insert({"C4",Coords(-0.8582,-0.7868,-2.2432,"C4", 1.0)});
+
+    // total models used :: 257
+    centeringAtoms["RNA"] = "C4'";  // use this for backbone water placements
+    sideChains["RNA"].insert({"P",Coords(-1.1345,-3.2655,-1.6251,"P", 1.0)});
+//    sideChains["RNA"].insert({"OP1",Coords(-2.6256,-3.3246,-1.5605,"OP1", 1.0)});
+//    sideChains["RNA"].insert({"OP2",Coords(-0.4449,-3.9022,-2.7792,"OP2", 1.0)});
+    sideChains["RNA"].insert({"O5'",Coords(-0.6601,-1.7730,-1.4855,"O5'", 1.0)});
+    sideChains["RNA"].insert({"C5'",Coords(-1.0386,-1.0170,-0.3430,"C5'", 1.0)});
+    sideChains["RNA"].insert({"C4'",Coords(0.0000,0.0000,0.0000,"C4'", 1.0)});
+    sideChains["RNA"].insert({"O4'",Coords(1.2588,-0.6633,0.2718,"O4'", 1.0)});
+    sideChains["RNA"].insert({"C3'",Coords(0.3470,0.9650,-1.0993,"C3'", 1.0)});
+    sideChains["RNA"].insert({"O3'",Coords(-0.6173,1.9918,-1.2240,"O3'", 1.0)});
+    sideChains["RNA"].insert({"C2'",Coords(1.7234,1.4527,-0.6744,"C2'", 1.0)});
+    sideChains["RNA"].insert({"C1'",Coords(2.3307,0.1507,-0.1754,"C1'", 1.0)});
 
     // any new residue requires set of centered coordinates - maybe averaged followed by a set of hydrating waters
+    // total models used :: 126
+    centeringAtoms["DNA"] = "C4'";
+    sideChains["DNA"].insert({"P",Coords(3.6962,-1.2041,-0.2176,"P", 1.0)});
+//    sideChains["DNA"].insert({"OP1",Coords(3.8853,-2.1457,0.9082,"OP1", 1.0)});
+//    sideChains["DNA"].insert({"OP2",Coords(4.3353,-1.4720,-1.5237,"OP2", 1.0)});
+    sideChains["DNA"].insert({"O5'",Coords(2.1332,-1.0217,-0.4514,"O5'", 1.0)});
+    sideChains["DNA"].insert({"C5'",Coords(1.2963,-0.5015,0.5897,"C5'", 1.0)});
+    sideChains["DNA"].insert({"C4'",Coords(0.0000,0.0000,0.0000,"C4'", 1.0)});
+    sideChains["DNA"].insert({"O4'",Coords(0.2309,1.2644,-0.6669,"O4'", 1.0)});
+    sideChains["DNA"].insert({"C3'",Coords(-0.6141,-0.9136,-1.0622,"C3'", 1.0)});
+    sideChains["DNA"].insert({"O3'",Coords(-2.0251,-0.7011,-1.0625,"O3'", 1.0)});
+    sideChains["DNA"].insert({"C2'",Coords(-0.1427,-0.2829,-2.3562,"C2'", 1.0)});
+    sideChains["DNA"].insert({"C1'",Coords(-0.3023,1.1710,-1.9746,"C1'", 1.0)});
+//    sideChains["DG"].insert({"N9",Coords(0.3796,2.1420,-2.8215,"N9", 1.0)});
+//    sideChains["DG"].insert({"C8",Coords(1.4450,1.9262,-3.6606,"C8", 1.0)});
+//    sideChains["DG"].insert({"N7",Coords(1.8109,2.9989,-4.3081,"N7", 1.0)});
+//    sideChains["DG"].insert({"C5",Coords(0.9217,3.9760,-3.8836,"C5", 1.0)});
+//    sideChains["DG"].insert({"C6",Coords(0.8230,5.3454,-4.2393,"C6", 1.0)});
+//    sideChains["DG"].insert({"O6",Coords(1.5182,5.9879,-5.0317,"O6", 1.0)});
+//    sideChains["DG"].insert({"N1",Coords(-0.2221,5.9725,-3.5682,"N1", 1.0)});
+//    sideChains["DG"].insert({"C2",Coords(-1.0633,5.3627,-2.6718,"C2", 1.0)});
+//    sideChains["DG"].insert({"N2",Coords(-2.0145,6.1374,-2.1320,"N2", 1.0)});
+//    sideChains["DG"].insert({"N3",Coords(-0.9770,4.0900,-2.3270,"N3", 1.0)});
+//    sideChains["DG"].insert({"C4",Coords(0.0296,3.4616,-2.9684,"C4", 1.0)});
 
     std::vector<Coords> * pwater;
     // Create Vector for new Residue ALA
@@ -1418,610 +1505,426 @@ void Waters::createBackbonesAndSideChains(){
 
     // ADE in RNA
     // Create Vector for new Residue A
-    waters[" rA"] = std::vector<Coords>(16);
-    pwater = &waters[" rA"];
-    (*pwater)[0].x = -2.3151;
-    (*pwater)[0].y = -1.9034;
-    (*pwater)[0].z = 6.6707;
-    (*pwater)[0].type = "O";
-    (*pwater)[0].occ = 0.6670;
-    (*pwater)[1].x = -2.9978;
-    (*pwater)[1].y = 5.1559;
-    (*pwater)[1].z = 1.1633;
-    (*pwater)[1].type = "O";
-    (*pwater)[1].occ = 1.0000;
-    (*pwater)[2].x = 3.8593;
-    (*pwater)[2].y = 3.4099;
-    (*pwater)[2].z = 3.7829;
-    (*pwater)[2].type = "O";
-    (*pwater)[2].occ = 1.0000;
-    (*pwater)[3].x = 2.4351;
-    (*pwater)[3].y = 6.5518;
-    (*pwater)[3].z = 4.3852;
-    (*pwater)[3].type = "O";
-    (*pwater)[3].occ = 0.6670;
-    (*pwater)[4].x = -0.9107;
-    (*pwater)[4].y = 7.1066;
-    (*pwater)[4].z = 1.0449;
-    (*pwater)[4].type = "O";
-    (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = -2.7475;
-    (*pwater)[5].y = 0.7178;
-    (*pwater)[5].z = 3.7877;
-    (*pwater)[5].type = "O";
-    (*pwater)[5].occ = 1.0000;
-    (*pwater)[6].x = -4.6706;
-    (*pwater)[6].y = 1.7970;
-    (*pwater)[6].z = -1.1000;
-    (*pwater)[6].type = "O";
-    (*pwater)[6].occ = 0.6670;
-    (*pwater)[7].x = -0.4712;
-    (*pwater)[7].y = 7.7070;
-    (*pwater)[7].z = 3.9309;
-    (*pwater)[7].type = "O";
-    (*pwater)[7].occ = 0.3330;
-    (*pwater)[8].x = 4.6818;
-    (*pwater)[8].y = -1.5165;
-    (*pwater)[8].z = 1.9604;
-    (*pwater)[8].type = "O";
-    (*pwater)[8].occ = 0.6670;
-    (*pwater)[9].x = 3.1355;
-    (*pwater)[9].y = 1.3777;
-    (*pwater)[9].z = 1.3600;
-    (*pwater)[9].type = "O";
-    (*pwater)[9].occ = 0.3330;
-    (*pwater)[10].x = -3.7317;
-    (*pwater)[10].y = 2.2702;
-    (*pwater)[10].z = 3.5079;
-    (*pwater)[10].type = "O";
-    (*pwater)[10].occ = 0.3330;
-    (*pwater)[11].x = 5.2641;
-    (*pwater)[11].y = 3.2647;
-    (*pwater)[11].z = 1.5906;
-    (*pwater)[11].type = "O";
-    (*pwater)[11].occ = 0.3330;
-    (*pwater)[12].x = 1.6179;
-    (*pwater)[12].y = 7.7585;
-    (*pwater)[12].z = 3.1372;
-    (*pwater)[12].type = "O";
-    (*pwater)[12].occ = 0.3330;
-    (*pwater)[13].x = -0.9632;
-    (*pwater)[13].y = -0.4734;
-    (*pwater)[13].z = 8.7067;
-    (*pwater)[13].type = "O";
-    (*pwater)[13].occ = 0.3330;
-    (*pwater)[14].x = 6.0020;
-    (*pwater)[14].y = -5.3822;
-    (*pwater)[14].z = 2.2091;
-    (*pwater)[14].type = "O";
-    (*pwater)[14].occ = 0.3330;
-    (*pwater)[15].x = 4.4519;
-    (*pwater)[15].y = -2.2909;
-    (*pwater)[15].z = -0.3282;
-    (*pwater)[15].type = "O";
-    (*pwater)[15].occ = 0.3330;
-
-// Create Vector for new Residue G
-    waters[" rG"] = std::vector<Coords>(21);
-    pwater = &waters[" rG"];
-    (*pwater)[0].x = -5.0474;
-    (*pwater)[0].y = 0.6048;
-    (*pwater)[0].z = 5.5357;
+    waters["rA"] = std::vector<Coords>(14);
+    pwater = &waters["rA"];
+    (*pwater)[0].x = -3.5162;
+    (*pwater)[0].y = 4.3393;
+    (*pwater)[0].z = -3.5739;
     (*pwater)[0].type = "O";
     (*pwater)[0].occ = 1.0000;
-    (*pwater)[1].x = 0.1009;
-    (*pwater)[1].y = 0.2850;
-    (*pwater)[1].z = 6.3765;
+    (*pwater)[1].x = -3.5499;
+    (*pwater)[1].y = 3.4190;
+    (*pwater)[1].z = 6.3245;
     (*pwater)[1].type = "O";
     (*pwater)[1].occ = 1.0000;
-    (*pwater)[2].x = -1.3157;
-    (*pwater)[2].y = -4.3911;
-    (*pwater)[2].z = -0.3592;
+    (*pwater)[2].x = -1.8203;
+    (*pwater)[2].y = 12.1766;
+    (*pwater)[2].z = 1.8823;
     (*pwater)[2].type = "O";
     (*pwater)[2].occ = 1.0000;
-    (*pwater)[3].x = -4.3172;
-    (*pwater)[3].y = -4.2792;
-    (*pwater)[3].z = 1.7921;
+    (*pwater)[3].x = -5.0946;
+    (*pwater)[3].y = -1.9847;
+    (*pwater)[3].z = -2.3524;
     (*pwater)[3].type = "O";
     (*pwater)[3].occ = 1.0000;
-    (*pwater)[4].x = 6.8415;
-    (*pwater)[4].y = 2.8652;
-    (*pwater)[4].z = 2.9403;
+    (*pwater)[4].x = -3.1875;
+    (*pwater)[4].y = 8.0440;
+    (*pwater)[4].z = 0.9046;
     (*pwater)[4].type = "O";
     (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = 9.8814;
-    (*pwater)[5].y = -1.0003;
-    (*pwater)[5].z = -0.9952;
+    (*pwater)[5].x = -0.5154;
+    (*pwater)[5].y = -4.6238;
+    (*pwater)[5].z = 1.9894;
     (*pwater)[5].type = "O";
     (*pwater)[5].occ = 1.0000;
-    (*pwater)[6].x = -0.0358;
-    (*pwater)[6].y = -5.3617;
-    (*pwater)[6].z = -3.8965;
-    (*pwater)[6].type = "O";
-    (*pwater)[6].occ = 0.6670;
-    (*pwater)[7].x = 0.7130;
-    (*pwater)[7].y = 2.0723;
-    (*pwater)[7].z = 3.7056;
-    (*pwater)[7].type = "O";
-    (*pwater)[7].occ = 1.0000;
-    (*pwater)[8].x = 0.2772;
-    (*pwater)[8].y = -6.5138;
-    (*pwater)[8].z = -0.2537;
-    (*pwater)[8].type = "O";
-    (*pwater)[8].occ = 1.0000;
-    (*pwater)[9].x = 2.8151;
-    (*pwater)[9].y = -7.9146;
-    (*pwater)[9].z = 1.9377;
-    (*pwater)[9].type = "O";
-    (*pwater)[9].occ = 1.0000;
-    (*pwater)[10].x = -6.8175;
-    (*pwater)[10].y = 0.2770;
-    (*pwater)[10].z = 1.1481;
-    (*pwater)[10].type = "O";
-    (*pwater)[10].occ = 0.3330;
-    (*pwater)[11].x = 3.3244;
-    (*pwater)[11].y = 1.9211;
-    (*pwater)[11].z = 3.2390;
-    (*pwater)[11].type = "O";
-    (*pwater)[11].occ = 1.0000;
-    (*pwater)[12].x = -5.4723;
-    (*pwater)[12].y = -1.8342;
-    (*pwater)[12].z = 1.4139;
-    (*pwater)[12].type = "O";
-    (*pwater)[12].occ = 1.0000;
-    (*pwater)[13].x = -1.2037;
-    (*pwater)[13].y = -7.1516;
-    (*pwater)[13].z = 2.7445;
-    (*pwater)[13].type = "O";
-    (*pwater)[13].occ = 0.6670;
-    (*pwater)[14].x = 8.5251;
-    (*pwater)[14].y = -3.5069;
-    (*pwater)[14].z = -3.9051;
-    (*pwater)[14].type = "O";
-    (*pwater)[14].occ = 0.3330;
-    (*pwater)[15].x = 10.4743;
-    (*pwater)[15].y = 0.6524;
-    (*pwater)[15].z = 1.1108;
-    (*pwater)[15].type = "O";
-    (*pwater)[15].occ = 0.3330;
-    (*pwater)[16].x = -0.1180;
-    (*pwater)[16].y = 4.3302;
-    (*pwater)[16].z = 5.7508;
-    (*pwater)[16].type = "O";
-    (*pwater)[16].occ = 0.3330;
-    (*pwater)[17].x = 7.3654;
-    (*pwater)[17].y = 1.0194;
-    (*pwater)[17].z = 4.3941;
-    (*pwater)[17].type = "O";
-    (*pwater)[17].occ = 0.3330;
-    (*pwater)[18].x = -6.2170;
-    (*pwater)[18].y = -2.8016;
-    (*pwater)[18].z = -1.1848;
-    (*pwater)[18].type = "O";
-    (*pwater)[18].occ = 0.3330;
-    (*pwater)[19].x = 6.6659;
-    (*pwater)[19].y = -1.5060;
-    (*pwater)[19].z = 2.9142;
-    (*pwater)[19].type = "O";
-    (*pwater)[19].occ = 0.3330;
-    (*pwater)[20].x = -6.8774;
-    (*pwater)[20].y = -3.1975;
-    (*pwater)[20].z = 4.3375;
-    (*pwater)[20].type = "O";
-    (*pwater)[20].occ = 0.3330;
-
-// Create Vector for new Residue U
-    waters[" rU"] = std::vector<Coords>(12);
-    pwater = &waters[" rU"];
-    (*pwater)[0].x = 2.6331;
-    (*pwater)[0].y = 3.3829;
-    (*pwater)[0].z = 2.0980;
-    (*pwater)[0].type = "O";
-    (*pwater)[0].occ = 1.0000;
-    (*pwater)[1].x = 1.4436;
-    (*pwater)[1].y = 2.2385;
-    (*pwater)[1].z = 5.6663;
-    (*pwater)[1].type = "O";
-    (*pwater)[1].occ = 1.0000;
-    (*pwater)[2].x = -2.9314;
-    (*pwater)[2].y = 2.6933;
-    (*pwater)[2].z = 4.6556;
-    (*pwater)[2].type = "O";
-    (*pwater)[2].occ = 0.6670;
-    (*pwater)[3].x = -2.4196;
-    (*pwater)[3].y = -4.0484;
-    (*pwater)[3].z = 3.7483;
-    (*pwater)[3].type = "O";
-    (*pwater)[3].occ = 0.6670;
-    (*pwater)[4].x = 2.2664;
-    (*pwater)[4].y = -4.7059;
-    (*pwater)[4].z = 1.4133;
-    (*pwater)[4].type = "O";
-    (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = 1.9806;
-    (*pwater)[5].y = 5.1754;
-    (*pwater)[5].z = 0.4960;
-    (*pwater)[5].type = "O";
-    (*pwater)[5].occ = 0.3330;
-    (*pwater)[6].x = -1.5934;
-    (*pwater)[6].y = -1.3653;
-    (*pwater)[6].z = 7.8245;
+    (*pwater)[6].x = 0.7010;
+    (*pwater)[6].y = 0.6447;
+    (*pwater)[6].z = 3.8475;
     (*pwater)[6].type = "O";
     (*pwater)[6].occ = 1.0000;
-    (*pwater)[7].x = 4.1326;
-    (*pwater)[7].y = 5.9174;
-    (*pwater)[7].z = 0.9400;
-    (*pwater)[7].type = "O";
-    (*pwater)[7].occ = 0.6670;
-    (*pwater)[8].x = -0.4232;
-    (*pwater)[8].y = -5.4076;
-    (*pwater)[8].z = 5.0181;
-    (*pwater)[8].type = "O";
-    (*pwater)[8].occ = 0.3330;
-    (*pwater)[9].x = 1.6060;
-    (*pwater)[9].y = -3.6626;
-    (*pwater)[9].z = 3.3271;
-    (*pwater)[9].type = "O";
-    (*pwater)[9].occ = 0.6670;
-    (*pwater)[10].x = -4.7927;
-    (*pwater)[10].y = -0.2808;
-    (*pwater)[10].z = 4.6545;
-    (*pwater)[10].type = "O";
-    (*pwater)[10].occ = 0.3330;
-    (*pwater)[11].x = -5.3728;
-    (*pwater)[11].y = 1.2300;
-    (*pwater)[11].z = 4.5763;
-    (*pwater)[11].type = "O";
-    (*pwater)[11].occ = 0.3330;
-
-// Create Vector for new Residue C
-    waters[" rC"] = std::vector<Coords>(17);
-    pwater = &waters[" rC"];
-    (*pwater)[0].x = 1.3207;
-    (*pwater)[0].y = -2.4963;
-    (*pwater)[0].z = 3.4978;
-    (*pwater)[0].type = "O";
-    (*pwater)[0].occ = 1.0000;
-    (*pwater)[1].x = -0.6073;
-    (*pwater)[1].y = 2.3336;
-    (*pwater)[1].z = 5.5621;
-    (*pwater)[1].type = "O";
-    (*pwater)[1].occ = 1.0000;
-    (*pwater)[2].x = -5.4325;
-    (*pwater)[2].y = 3.5253;
-    (*pwater)[2].z = 1.9739;
-    (*pwater)[2].type = "O";
-    (*pwater)[2].occ = 1.0000;
-    (*pwater)[3].x = -1.8222;
-    (*pwater)[3].y = -1.1333;
-    (*pwater)[3].z = 5.6276;
-    (*pwater)[3].type = "O";
-    (*pwater)[3].occ = 1.0000;
-    (*pwater)[4].x = -4.9458;
-    (*pwater)[4].y = 2.8218;
-    (*pwater)[4].z = -0.4615;
-    (*pwater)[4].type = "O";
-    (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = -5.7648;
-    (*pwater)[5].y = 1.4829;
-    (*pwater)[5].z = 5.7102;
-    (*pwater)[5].type = "O";
-    (*pwater)[5].occ = 1.0000;
-    (*pwater)[6].x = 0.9915;
-    (*pwater)[6].y = -1.1308;
-    (*pwater)[6].z = 6.5248;
-    (*pwater)[6].type = "O";
-    (*pwater)[6].occ = 0.3330;
-    (*pwater)[7].x = -4.6099;
-    (*pwater)[7].y = -1.6508;
-    (*pwater)[7].z = -2.1170;
+    (*pwater)[7].x = -6.8347;
+    (*pwater)[7].y = 3.5568;
+    (*pwater)[7].z = -5.5333;
     (*pwater)[7].type = "O";
     (*pwater)[7].occ = 1.0000;
-    (*pwater)[8].x = -5.3239;
-    (*pwater)[8].y = -4.6550;
-    (*pwater)[8].z = -2.9277;
+    (*pwater)[8].x = -0.2917;
+    (*pwater)[8].y = 11.3987;
+    (*pwater)[8].z = 4.6815;
     (*pwater)[8].type = "O";
     (*pwater)[8].occ = 1.0000;
-    (*pwater)[9].x = 4.2943;
-    (*pwater)[9].y = -5.0980;
-    (*pwater)[9].z = 3.2428;
-    (*pwater)[9].type = "O";
-    (*pwater)[9].occ = 0.6670;
-    (*pwater)[10].x = 4.9298;
-    (*pwater)[10].y = -9.0100;
-    (*pwater)[10].z = 1.5053;
-    (*pwater)[10].type = "O";
-    (*pwater)[10].occ = 0.3330;
-    (*pwater)[11].x = -2.5827;
-    (*pwater)[11].y = 5.3573;
-    (*pwater)[11].z = 2.5159;
-    (*pwater)[11].type = "O";
-    (*pwater)[11].occ = 0.3330;
-    (*pwater)[12].x = 1.0438;
-    (*pwater)[12].y = 1.0153;
-    (*pwater)[12].z = 6.7282;
-    (*pwater)[12].type = "O";
-    (*pwater)[12].occ = 0.6670;
-    (*pwater)[13].x = 3.3454;
-    (*pwater)[13].y = -6.4521;
-    (*pwater)[13].z = 3.2185;
-    (*pwater)[13].type = "O";
-    (*pwater)[13].occ = 0.3330;
-    (*pwater)[14].x = 3.5398;
-    (*pwater)[14].y = -7.6049;
-    (*pwater)[14].z = 0.6300;
-    (*pwater)[14].type = "O";
-    (*pwater)[14].occ = 0.3330;
-    (*pwater)[15].x = -5.8325;
-    (*pwater)[15].y = -0.7430;
-    (*pwater)[15].z = -1.5070;
-    (*pwater)[15].type = "O";
-    (*pwater)[15].occ = 0.3330;
-    (*pwater)[16].x = 4.9845;
-    (*pwater)[16].y = -3.6332;
-    (*pwater)[16].z = 0.9446;
-    (*pwater)[16].type = "O";
-    (*pwater)[16].occ = 0.3330;
-
-
-// Create Vector for new Residue DA
-    waters[" DA"] = std::vector<Coords>(11);
-    pwater = &waters[" DA"];
-    (*pwater)[0].x = 3.9244;
-    (*pwater)[0].y = 2.8812;
-    (*pwater)[0].z = -2.4520;
-    (*pwater)[0].type = "O";
-    (*pwater)[0].occ = 0.6670;
-    (*pwater)[1].x = 4.9959;
-    (*pwater)[1].y = -1.2603;
-    (*pwater)[1].z = 3.1532;
-    (*pwater)[1].type = "O";
-    (*pwater)[1].occ = 1.0000;
-    (*pwater)[2].x = 0.3329;
-    (*pwater)[2].y = -1.8341;
-    (*pwater)[2].z = 4.3724;
-    (*pwater)[2].type = "O";
-    (*pwater)[2].occ = 0.3330;
-    (*pwater)[3].x = 5.3992;
-    (*pwater)[3].y = 1.0315;
-    (*pwater)[3].z = -3.7158;
-    (*pwater)[3].type = "O";
-    (*pwater)[3].occ = 1.0000;
-    (*pwater)[4].x = 4.8103;
-    (*pwater)[4].y = -3.4228;
-    (*pwater)[4].z = -3.3444;
-    (*pwater)[4].type = "O";
-    (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = 2.3935;
-    (*pwater)[5].y = 4.1370;
-    (*pwater)[5].z = -0.2270;
-    (*pwater)[5].type = "O";
-    (*pwater)[5].occ = 1.0000;
-    (*pwater)[6].x = 3.3967;
-    (*pwater)[6].y = 6.9620;
-    (*pwater)[6].z = 2.0570;
-    (*pwater)[6].type = "O";
-    (*pwater)[6].occ = 0.3330;
-    (*pwater)[7].x = 7.4121;
-    (*pwater)[7].y = 1.6179;
-    (*pwater)[7].z = -4.1550;
-    (*pwater)[7].type = "O";
-    (*pwater)[7].occ = 0.3330;
-    (*pwater)[8].x = 6.5471;
-    (*pwater)[8].y = -3.8436;
-    (*pwater)[8].z = 0.7699;
-    (*pwater)[8].type = "O";
-    (*pwater)[8].occ = 0.3330;
-    (*pwater)[9].x = 1.4105;
-    (*pwater)[9].y = 8.1095;
-    (*pwater)[9].z = 1.0448;
+    (*pwater)[9].x = -1.4407;
+    (*pwater)[9].y = 9.4941;
+    (*pwater)[9].z = -0.7456;
     (*pwater)[9].type = "O";
     (*pwater)[9].occ = 1.0000;
-    (*pwater)[10].x = 7.3812;
-    (*pwater)[10].y = -0.9858;
-    (*pwater)[10].z = -4.0873;
-    (*pwater)[10].type = "O";
-    (*pwater)[10].occ = 0.3330;
-
-
-// Create Vector for new Residue DC
-    waters[" DC"] = std::vector<Coords>(12);
-    pwater = &waters[" DC"];
-    (*pwater)[0].x = 4.1711;
-    (*pwater)[0].y = 2.3387;
-    (*pwater)[0].z = -3.4908;
-    (*pwater)[0].type = "O";
-    (*pwater)[0].occ = 1.0000;
-    (*pwater)[1].x = 4.9321;
-    (*pwater)[1].y = 3.5497;
-    (*pwater)[1].z = -0.5246;
-    (*pwater)[1].type = "O";
-    (*pwater)[1].occ = 0.6670;
-    (*pwater)[2].x = 2.3683;
-    (*pwater)[2].y = 6.8861;
-    (*pwater)[2].z = -1.6557;
-    (*pwater)[2].type = "O";
-    (*pwater)[2].occ = 1.0000;
-    (*pwater)[3].x = 2.1057;
-    (*pwater)[3].y = 5.8861;
-    (*pwater)[3].z = -5.1574;
-    (*pwater)[3].type = "O";
-    (*pwater)[3].occ = 1.0000;
-    (*pwater)[4].x = 7.9822;
-    (*pwater)[4].y = 1.4160;
-    (*pwater)[4].z = -0.0039;
-    (*pwater)[4].type = "O";
-    (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = 4.4257;
-    (*pwater)[5].y = 6.1779;
-    (*pwater)[5].z = 0.4837;
-    (*pwater)[5].type = "O";
-    (*pwater)[5].occ = 0.3330;
-    (*pwater)[6].x = 8.1642;
-    (*pwater)[6].y = -1.5826;
-    (*pwater)[6].z = 1.8757;
-    (*pwater)[6].type = "O";
-    (*pwater)[6].occ = 0.3330;
-    (*pwater)[7].x = 1.2021;
-    (*pwater)[7].y = -0.0178;
-    (*pwater)[7].z = 4.7893;
-    (*pwater)[7].type = "O";
-    (*pwater)[7].occ = 0.3330;
-    (*pwater)[8].x = 4.5325;
-    (*pwater)[8].y = -6.7553;
-    (*pwater)[8].z = -2.0668;
-    (*pwater)[8].type = "O";
-    (*pwater)[8].occ = 1.0000;
-    (*pwater)[9].x = 3.4651;
-    (*pwater)[9].y = 1.6782;
-    (*pwater)[9].z = 4.0884;
-    (*pwater)[9].type = "O";
-    (*pwater)[9].occ = 1.0000;
-    (*pwater)[10].x = -3.3545;
-    (*pwater)[10].y = 2.6379;
-    (*pwater)[10].z = 4.1373;
-    (*pwater)[10].type = "O";
-    (*pwater)[10].occ = 0.6670;
-    (*pwater)[11].x = 5.1173;
-    (*pwater)[11].y = -2.4093;
-    (*pwater)[11].z = 3.4462;
-    (*pwater)[11].type = "O";
-    (*pwater)[11].occ = 0.3330;
-
-
-// Create Vector for new Residue DG
-    waters[" DG"] = std::vector<Coords>(14);
-    pwater = &waters[" DG"];
-    (*pwater)[0].x = -4.0134;
-    (*pwater)[0].y = -4.1199;
-    (*pwater)[0].z = 3.0242;
-    (*pwater)[0].type = "O";
-    (*pwater)[0].occ = 1.0000;
-    (*pwater)[1].x = -3.0232;
-    (*pwater)[1].y = 6.5053;
-    (*pwater)[1].z = 1.2605;
-    (*pwater)[1].type = "O";
-    (*pwater)[1].occ = 1.0000;
-    (*pwater)[2].x = 4.6464;
-    (*pwater)[2].y = 1.2016;
-    (*pwater)[2].z = 4.0452;
-    (*pwater)[2].type = "O";
-    (*pwater)[2].occ = 1.0000;
-    (*pwater)[3].x = -1.8470;
-    (*pwater)[3].y = 3.9853;
-    (*pwater)[3].z = 5.6001;
-    (*pwater)[3].type = "O";
-    (*pwater)[3].occ = 1.0000;
-    (*pwater)[4].x = 7.3519;
-    (*pwater)[4].y = -6.2410;
-    (*pwater)[4].z = 0.9215;
-    (*pwater)[4].type = "O";
-    (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = 5.1823;
-    (*pwater)[5].y = -1.1410;
-    (*pwater)[5].z = 2.3331;
-    (*pwater)[5].type = "O";
-    (*pwater)[5].occ = 1.0000;
-    (*pwater)[6].x = 5.9589;
-    (*pwater)[6].y = -8.4685;
-    (*pwater)[6].z = 0.8028;
-    (*pwater)[6].type = "O";
-    (*pwater)[6].occ = 0.3330;
-    (*pwater)[7].x = -1.5398;
-    (*pwater)[7].y = 6.5863;
-    (*pwater)[7].z = 5.2076;
-    (*pwater)[7].type = "O";
-    (*pwater)[7].occ = 1.0000;
-    (*pwater)[8].x = -5.4612;
-    (*pwater)[8].y = 0.7465;
-    (*pwater)[8].z = 0.9575;
-    (*pwater)[8].type = "O";
-    (*pwater)[8].occ = 1.0000;
-    (*pwater)[9].x = -5.1384;
-    (*pwater)[9].y = 3.8719;
-    (*pwater)[9].z = -0.4148;
-    (*pwater)[9].type = "O";
-    (*pwater)[9].occ = 0.3330;
-    (*pwater)[10].x = -0.2801;
-    (*pwater)[10].y = 5.5866;
-    (*pwater)[10].z = 3.5442;
-    (*pwater)[10].type = "O";
-    (*pwater)[10].occ = 0.3330;
-    (*pwater)[11].x = -3.9657;
-    (*pwater)[11].y = -0.7548;
-    (*pwater)[11].z = 4.6576;
-    (*pwater)[11].type = "O";
-    (*pwater)[11].occ = 0.3330;
-    (*pwater)[12].x = 4.1258;
-    (*pwater)[12].y = 4.1804;
-    (*pwater)[12].z = 3.8482;
-    (*pwater)[12].type = "O";
-    (*pwater)[12].occ = 1.0000;
-    (*pwater)[13].x = -5.8264;
-    (*pwater)[13].y = 3.3762;
-    (*pwater)[13].z = 1.6902;
-    (*pwater)[13].type = "O";
-    (*pwater)[13].occ = 0.3330;
-
-
-// Create Vector for new Residue DT
-    waters[" DT"] = std::vector<Coords>(11);
-    pwater = &waters[" DT"];
-    (*pwater)[0].x = 2.0406;
-    (*pwater)[0].y = -7.6477;
-    (*pwater)[0].z = 1.5050;
-    (*pwater)[0].type = "O";
-    (*pwater)[0].occ = 1.0000;
-    (*pwater)[1].x = 4.0482;
-    (*pwater)[1].y = -7.8872;
-    (*pwater)[1].z = 0.0667;
-    (*pwater)[1].type = "O";
-    (*pwater)[1].occ = 1.0000;
-    (*pwater)[2].x = -5.5711;
-    (*pwater)[2].y = -3.2725;
-    (*pwater)[2].z = 2.7347;
-    (*pwater)[2].type = "O";
-    (*pwater)[2].occ = 0.6670;
-    (*pwater)[3].x = 5.7182;
-    (*pwater)[3].y = 1.7706;
-    (*pwater)[3].z = 1.9058;
-    (*pwater)[3].type = "O";
-    (*pwater)[3].occ = 0.6670;
-    (*pwater)[4].x = 7.4716;
-    (*pwater)[4].y = 2.6815;
-    (*pwater)[4].z = 0.2087;
-    (*pwater)[4].type = "O";
-    (*pwater)[4].occ = 1.0000;
-    (*pwater)[5].x = 0.6752;
-    (*pwater)[5].y = -0.6026;
-    (*pwater)[5].z = 5.5922;
-    (*pwater)[5].type = "O";
-    (*pwater)[5].occ = 1.0000;
-    (*pwater)[6].x = 3.4773;
-    (*pwater)[6].y = 1.1435;
-    (*pwater)[6].z = 3.2623;
-    (*pwater)[6].type = "O";
-    (*pwater)[6].occ = 1.0000;
-    (*pwater)[7].x = -3.5632;
-    (*pwater)[7].y = -5.9902;
-    (*pwater)[7].z = 5.5048;
-    (*pwater)[7].type = "O";
-    (*pwater)[7].occ = 0.3330;
-    (*pwater)[8].x = -3.5639;
-    (*pwater)[8].y = -5.2633;
-    (*pwater)[8].z = 1.1695;
-    (*pwater)[8].type = "O";
-    (*pwater)[8].occ = 1.0000;
-    (*pwater)[9].x = 0.0230;
-    (*pwater)[9].y = -2.7772;
-    (*pwater)[9].z = 7.3155;
-    (*pwater)[9].type = "O";
-    (*pwater)[9].occ = 0.3330;
-    (*pwater)[10].x = -5.5912;
-    (*pwater)[10].y = -3.7620;
-    (*pwater)[10].z = 5.7415;
+    (*pwater)[10].x = -2.4892;
+    (*pwater)[10].y = 1.3303;
+    (*pwater)[10].z = -7.4622;
     (*pwater)[10].type = "O";
     (*pwater)[10].occ = 1.0000;
+    (*pwater)[11].x = 3.9484;
+    (*pwater)[11].y = -0.4974;
+    (*pwater)[11].z = -1.1912;
+    (*pwater)[11].type = "O";
+    (*pwater)[11].occ = 1.0000;
+    (*pwater)[12].x = 3.4358;
+    (*pwater)[12].y = 0.2977;
+    (*pwater)[12].z = 1.2967;
+    (*pwater)[12].type = "O";
+    (*pwater)[12].occ = 1.0000;
+    (*pwater)[13].x = 2.9584;
+    (*pwater)[13].y = -2.8113;
+    (*pwater)[13].z = -5.4033;
+    (*pwater)[13].type = "O";
+    (*pwater)[13].occ = 1.0000;
+
+
+// Create Vector for new Residue G
+    waters["rG"] = std::vector<Coords>(14);
+    pwater = &waters["rG"];
+    (*pwater)[0].x = 0.4793;
+    (*pwater)[0].y = 5.4623;
+    (*pwater)[0].z = -1.5606;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = -5.0206;
+    (*pwater)[1].y = 0.2953;
+    (*pwater)[1].z = 2.2531;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = 0.7592;
+    (*pwater)[2].y = 4.2446;
+    (*pwater)[2].z = -5.7303;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
+    (*pwater)[3].x = 1.5897;
+    (*pwater)[3].y = -1.3761;
+    (*pwater)[3].z = 4.1003;
+    (*pwater)[3].type = "O";
+    (*pwater)[3].occ = 1.0000;
+    (*pwater)[4].x = 4.7960;
+    (*pwater)[4].y = 1.4949;
+    (*pwater)[4].z = 7.0876;
+    (*pwater)[4].type = "O";
+    (*pwater)[4].occ = 1.0000;
+    (*pwater)[5].x = -4.3525;
+    (*pwater)[5].y = -1.2387;
+    (*pwater)[5].z = -5.1036;
+    (*pwater)[5].type = "O";
+    (*pwater)[5].occ = 1.0000;
+    (*pwater)[6].x = -4.9237;
+    (*pwater)[6].y = 4.4384;
+    (*pwater)[6].z = -1.9495;
+    (*pwater)[6].type = "O";
+    (*pwater)[6].occ = 1.0000;
+    (*pwater)[7].x = 0.4046;
+    (*pwater)[7].y = 7.6985;
+    (*pwater)[7].z = 1.3661;
+    (*pwater)[7].type = "O";
+    (*pwater)[7].occ = 1.0000;
+    (*pwater)[8].x = 2.9967;
+    (*pwater)[8].y = 4.1110;
+    (*pwater)[8].z = -3.6331;
+    (*pwater)[8].type = "O";
+    (*pwater)[8].occ = 1.0000;
+    (*pwater)[9].x = 5.5047;
+    (*pwater)[9].y = 5.0157;
+    (*pwater)[9].z = -2.3983;
+    (*pwater)[9].type = "O";
+    (*pwater)[9].occ = 1.0000;
+    (*pwater)[10].x = 12.6400;
+    (*pwater)[10].y = 4.1757;
+    (*pwater)[10].z = 0.4429;
+    (*pwater)[10].type = "O";
+    (*pwater)[10].occ = 1.0000;
+    (*pwater)[11].x = 7.0910;
+    (*pwater)[11].y = 4.0643;
+    (*pwater)[11].z = 7.6615;
+    (*pwater)[11].type = "O";
+    (*pwater)[11].occ = 1.0000;
+    (*pwater)[12].x = 4.8785;
+    (*pwater)[12].y = 7.9540;
+    (*pwater)[12].z = -1.8751;
+    (*pwater)[12].type = "O";
+    (*pwater)[12].occ = 1.0000;
+    (*pwater)[13].x = 6.8735;
+    (*pwater)[13].y = 9.2044;
+    (*pwater)[13].z = -2.5838;
+    (*pwater)[13].type = "O";
+    (*pwater)[13].occ = 1.0000;
+
+    // Create Vector for new Residue U
+    waters["rU"] = std::vector<Coords>(8);
+    pwater = &waters["rU"];
+    (*pwater)[0].x = -3.5019;
+    (*pwater)[0].y = 0.7294;
+    (*pwater)[0].z = 4.2101;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = 0.5694;
+    (*pwater)[1].y = -4.8909;
+    (*pwater)[1].z = -0.5521;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = -4.6876;
+    (*pwater)[2].y = 5.1135;
+    (*pwater)[2].z = 8.8948;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
+    (*pwater)[3].x = 4.0947;
+    (*pwater)[3].y = -0.9770;
+    (*pwater)[3].z = 0.1620;
+    (*pwater)[3].type = "O";
+    (*pwater)[3].occ = 1.0000;
+    (*pwater)[4].x = 7.2768;
+    (*pwater)[4].y = 0.5164;
+    (*pwater)[4].z = 4.3032;
+    (*pwater)[4].type = "O";
+    (*pwater)[4].occ = 1.0000;
+    (*pwater)[5].x = -8.4280;
+    (*pwater)[5].y = 1.6611;
+    (*pwater)[5].z = 2.3350;
+    (*pwater)[5].type = "O";
+    (*pwater)[5].occ = 1.0000;
+    (*pwater)[6].x = -3.2258;
+    (*pwater)[6].y = -5.1515;
+    (*pwater)[6].z = -0.9635;
+    (*pwater)[6].type = "O";
+    (*pwater)[6].occ = 1.0000;
+    (*pwater)[7].x = -1.1344;
+    (*pwater)[7].y = 1.3280;
+    (*pwater)[7].z = -3.8784;
+    (*pwater)[7].type = "O";
+    (*pwater)[7].occ = 1.0000;
+
+    // Create Vector for new Residue C
+    waters["rC"] = std::vector<Coords>(9);
+    pwater = &waters["rC"];
+    (*pwater)[0].x = -3.3560;
+    (*pwater)[0].y = -2.4191;
+    (*pwater)[0].z = 6.0745;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = 3.5198;
+    (*pwater)[1].y = -0.3978;
+    (*pwater)[1].z = -3.3341;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = -1.9399;
+    (*pwater)[2].y = -5.5953;
+    (*pwater)[2].z = -3.6108;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
+    (*pwater)[3].x = 4.0252;
+    (*pwater)[3].y = -3.4458;
+    (*pwater)[3].z = 5.4060;
+    (*pwater)[3].type = "O";
+    (*pwater)[3].occ = 1.0000;
+    (*pwater)[4].x = -0.0218;
+    (*pwater)[4].y = -3.9137;
+    (*pwater)[4].z = 4.1516;
+    (*pwater)[4].type = "O";
+    (*pwater)[4].occ = 1.0000;
+    (*pwater)[5].x = 1.6532;
+    (*pwater)[5].y = 3.6588;
+    (*pwater)[5].z = -0.5053;
+    (*pwater)[5].type = "O";
+    (*pwater)[5].occ = 1.0000;
+    (*pwater)[6].x = 3.6128;
+    (*pwater)[6].y = 6.1194;
+    (*pwater)[6].z = 3.9159;
+    (*pwater)[6].type = "O";
+    (*pwater)[6].occ = 1.0000;
+    (*pwater)[7].x = 2.6020;
+    (*pwater)[7].y = -6.3601;
+    (*pwater)[7].z = 0.2461;
+    (*pwater)[7].type = "O";
+    (*pwater)[7].occ = 1.0000;
+    (*pwater)[8].x = -3.3227;
+    (*pwater)[8].y = 4.1352;
+    (*pwater)[8].z = 9.7322;
+    (*pwater)[8].type = "O";
+    (*pwater)[8].occ = 1.0000;
+
+    waters["rI"] = std::vector<Coords>(2);
+    pwater = &waters["rI"];
+    (*pwater)[0].x = 3.0091;
+    (*pwater)[0].y = -0.2373;
+    (*pwater)[0].z = -2.2087;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = 3.0372;
+    (*pwater)[1].y = 0.0299;
+    (*pwater)[1].z = -5.3884;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+
+
+    // Create Vector for new Residue DA
+    waters["DA"] = std::vector<Coords>(3);
+    pwater = &waters["DA"];
+    (*pwater)[0].x = -3.5028;
+    (*pwater)[0].y = 5.6436;
+    (*pwater)[0].z = -0.4700;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = 1.6761;
+    (*pwater)[1].y = -1.0325;
+    (*pwater)[1].z = -3.2875;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = -2.0555;
+    (*pwater)[2].y = 2.3420;
+    (*pwater)[2].z = 3.4435;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
+
+    // RNA backbone
+    // Create Vector for new Residue RNA backbone
+    waters["RNA"] = std::vector<Coords>(10);
+    pwater = &waters["RNA"];
+    (*pwater)[0].x = 0.9132;
+    (*pwater)[0].y = -2.2776;
+    (*pwater)[0].z = -4.7812;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = -3.7335;
+    (*pwater)[1].y = -0.3780;
+    (*pwater)[1].z = -3.4614;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = 2.6709;
+    (*pwater)[2].y = -0.9810;
+    (*pwater)[2].z = 3.4014;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
+    (*pwater)[3].x = -0.8079;
+    (*pwater)[3].y = 3.6259;
+    (*pwater)[3].z = 1.3553;
+    (*pwater)[3].type = "O";
+    (*pwater)[3].occ = 1.0000;
+    (*pwater)[4].x = -2.2406;
+    (*pwater)[4].y = 5.2196;
+    (*pwater)[4].z = -0.5451;
+    (*pwater)[4].type = "O";
+    (*pwater)[4].occ = 1.0000;
+    (*pwater)[5].x = -2.2852;
+    (*pwater)[5].y = -6.0268;
+    (*pwater)[5].z = -4.0371;
+    (*pwater)[5].type = "O";
+    (*pwater)[5].occ = 1.0000;
+    (*pwater)[6].x = -3.3756;
+    (*pwater)[6].y = -3.4238;
+    (*pwater)[6].z = 1.6775;
+    (*pwater)[6].type = "O";
+    (*pwater)[6].occ = 1.0000;
+    (*pwater)[7].x = 1.3288;
+    (*pwater)[7].y = 1.6198;
+    (*pwater)[7].z = 3.3486;
+    (*pwater)[7].type = "O";
+    (*pwater)[7].occ = 1.0000;
+    (*pwater)[8].x = 4.3270;
+    (*pwater)[8].y = 3.4083;
+    (*pwater)[8].z = 1.1492;
+    (*pwater)[8].type = "O";
+    (*pwater)[8].occ = 1.0000;
+    (*pwater)[9].x = -4.3766;
+    (*pwater)[9].y = 0.9460;
+    (*pwater)[9].z = -0.1951;
+    (*pwater)[9].type = "O";
+    (*pwater)[9].occ = 1.0000;
+
+    waters["DNA"] = std::vector<Coords>(2);
+    pwater = &waters["DNA"];
+    (*pwater)[0].x = 2.9540;
+    (*pwater)[0].y = -2.0312;
+    (*pwater)[0].z = -3.0254;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = -2.9630;
+    (*pwater)[1].y = 4.4956;
+    (*pwater)[1].z = -0.4762;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+
+
+    // Create Vector for new Residue DC
+    waters["DC"] = std::vector<Coords>(4);
+    pwater = &waters["DC"];
+    (*pwater)[0].x = 5.5571;
+    (*pwater)[0].y = 2.4535;
+    (*pwater)[0].z = -0.5641;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = -2.1049;
+    (*pwater)[1].y = 3.7118;
+    (*pwater)[1].z = -5.3136;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = -1.7182;
+    (*pwater)[2].y = 2.9993;
+    (*pwater)[2].z = 1.6921;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
+    (*pwater)[3].x = 1.6478;
+    (*pwater)[3].y = 3.1839;
+    (*pwater)[3].z = 4.2544;
+    (*pwater)[3].type = "O";
+    (*pwater)[3].occ = 1.0000;
+
+    // Create Vector for new Residue DG
+    waters["DG"] = std::vector<Coords>(6);
+    pwater = &waters["DG"];
+    (*pwater)[0].x = -1.2622;
+    (*pwater)[0].y = 2.0057;
+    (*pwater)[0].z = 2.8183;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = -3.1615;
+    (*pwater)[1].y = 4.1614;
+    (*pwater)[1].z = 2.9041;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = 1.3153;
+    (*pwater)[2].y = 4.4565;
+    (*pwater)[2].z = -5.3356;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
+    (*pwater)[3].x = 3.2426;
+    (*pwater)[3].y = 1.9755;
+    (*pwater)[3].z = -4.6978;
+    (*pwater)[3].type = "O";
+    (*pwater)[3].occ = 1.0000;
+    (*pwater)[4].x = 3.4048;
+    (*pwater)[4].y = 4.9277;
+    (*pwater)[4].z = -4.6732;
+    (*pwater)[4].type = "O";
+    (*pwater)[4].occ = 1.0000;
+    (*pwater)[5].x = 2.2562;
+    (*pwater)[5].y = -2.1508;
+    (*pwater)[5].z = -3.1460;
+    (*pwater)[5].type = "O";
+    (*pwater)[5].occ = 1.0000;
+
+
+    // Create Vector for new Residue DT
+    waters["DT"] = std::vector<Coords>(3);         // 3
+    pwater = &waters["DT"];
+    (*pwater)[0].x = 0.2881;
+    (*pwater)[0].y = 4.4010;
+    (*pwater)[0].z = -0.4560;
+    (*pwater)[0].type = "O";
+    (*pwater)[0].occ = 1.0000;
+    (*pwater)[1].x = 7.5308;
+    (*pwater)[1].y = -2.0235;
+    (*pwater)[1].z = -0.1088;
+    (*pwater)[1].type = "O";
+    (*pwater)[1].occ = 1.0000;
+    (*pwater)[2].x = 0.6567;
+    (*pwater)[2].y = -4.3684;
+    (*pwater)[2].z = -0.1900;
+    (*pwater)[2].type = "O";
+    (*pwater)[2].occ = 1.0000;
 }
 
 
@@ -2076,74 +1979,79 @@ void Waters::hydrateAtomisticModel(AtomisticModel & aModel) {
             atomsInResidue = 1;
             startHere = i;
         }
-
-//        if (i == (numAtoms-1)){
-//            hydrateResidueDirect(currentRes, currentID, atomsInResidue, startHere, atomType, xvalue, yvalue, zvalue);
-//        }
     }
 
     std::string residue_index;
     totalwaters = (unsigned int)hydration.size();
 
-    //std::clock_t startTime = std::clock();
+    std::clock_t startTime = std::clock();
+
     // check for waters too close to each other - average their positions
-    float dwater = 2.8*2.8;
+    float dwater = 2.8*2.7;
 
     for(int w=0; w<totalwaters; w++){ // sort the waters.  waters too close will be moved to end of the vector
         auto pW = &hydration[w];
+
         vector3 vecW = vector3(pW->x, pW->y, pW->z);
 
+        float x_v = pW->x;
+        float y_v = pW->y;
+        float z_v = pW->z;
+        float occ = pW->occ;
+        unsigned int counter = 1;
+
         unsigned int k = w + 1;
+
         while(k < totalwaters){
             auto pK = &hydration[k];
             if ((vector3(pK->x, pK->y, pK->z) - vecW).sqlength() < dwater){
-                pW->x = 0.5f*(pK->x + vecW.x);
-                pW->y = 0.5f*(pK->y + vecW.y);
-                pW->z = 0.5f*(pK->z + vecW.z);
 
-                vecW = vector3(pW->x, pW->y, pW->z);
+                x_v += pK->x;
+                y_v += pK->y;
+                z_v += pK->z;
+                occ += pK->occ;
+                counter += 1;
+
                 std::iter_swap(hydration.begin()+k, hydration.begin()+(totalwaters-1));
-                //std::cout << "Averaging water position " << std::endl;
+                hydration.pop_back();
                 totalwaters--;
             } else {
                 k++;
             }
         }
+
+        float inv = 1.0/(float)counter;
+        pW->x = inv*x_v;
+        pW->y = inv*y_v;
+        pW->z = inv*z_v;
+        pW->occ = inv*occ;
     }
-//    double runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
-//    std::cout << " Averaging time " << runtime << std::endl;
+
     /*
      * prune waters too close to protein
      * does not consider hydrogens
-     *
      */
     for (unsigned int i=0; i<numAtoms; i++){
 
         currentID = pResIDs[i];
         currentRes = pResidues[i];
-        int atmnumber = atomicNumbers[i];
-        float rlimit;
+        boost::trim(currentRes);
 
-        auto it = minima.find(currentRes);
-        if (it == minima.end()){
-            rlimit = 2.2; //arbitrary
-        } else {
-            rlimit = it->second;
-        }
+        // could fail if residue not found - PDBModel should create the residue during instantiation
+        float rlimit = 2.2;//1.4 + SASTOOLS_RESIDUES_H::Residues::getResidue(currentRes)->getAtom(atomType[i])->getRadii();
 
-        float xval = xvalue[i];
-        float yval = yvalue[i];
-        float zval = zvalue[i];
-
-        vector3 anchor(xval, yval, zval);
+        vector3 anchor(xvalue[i], yvalue[i], zvalue[i]);
         rlimit *= rlimit; // compare the square distance to reduce operations in the loop
 
-        for(int w=0; w<totalwaters; w++){ // sort the waters.  waters too close will be moved to end of the vector
-            auto pW = &hydration[w];
+        for(int w=0; w < totalwaters; w++){ // sort the waters.  waters too close will be moved to end of the vector
+            auto pW = &hydration[w]; // these waters belong to a resid
+            float val = (anchor - vector3(pW->x, pW->y, pW->z)).length();
 
-            if ((pW->resid != currentID) && (anchor - vector3(pW->x, pW->y, pW->z)).sqlength() < rlimit ){ // too close for hydrogen bond
+            if ((anchor - vector3(pW->x, pW->y, pW->z)).sqlength() < rlimit ){ // too close for hydrogen bond
                 // reject
                 std::iter_swap(hydration.begin()+w, hydration.begin()+(totalwaters-1));
+                hydration.pop_back();
+                w = (w==0) ? 0 : w-1 ;
                 totalwaters--;
             }
 
@@ -2153,11 +2061,43 @@ void Waters::hydrateAtomisticModel(AtomisticModel & aModel) {
         }
     }
 
+    // for each water, what is the closest protein residue
+    // reject waters that are too far from closest atom
+    int w=0;
+    while(w<totalwaters){
+        auto pW = &hydration[w];
+        float closest, min_dis = FLT_MAX;
+
+        for (unsigned int i=0; i<numAtoms; i++){
+            vector3 anchor(xvalue[i], yvalue[i], zvalue[i]);
+
+            closest = (anchor - vector3(pW->x, pW->y, pW->z)).sqlength();
+            if (closest < min_dis){
+                min_dis = closest;
+            }
+        }
+
+        if (min_dis > 36){ // reject water if too far
+            std::cout << " Too far " << std::endl;
+            std::iter_swap(hydration.begin()+w, hydration.begin()+(totalwaters-1));
+            totalwaters--;
+        } else {
+            w++;
+        }
+    }
+
+//    std::shuffle(hydration.begin(), hydration.begin()+totalwaters, gen);
+//    totalwaters = totalwaters*0.791;
+
+    double runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
+    std::cout << " Averaging time " << runtime << std::endl;
+    std::cout << " Total waters " << totalwaters << std::endl;
 
     totalwatersInExcludedVolume = hydration.size() - totalwaters;
 
     delete[] tempWaters;
 
+    SASTOOLS_UTILS_H::logger("TOTAL WATERS IN HYDRATION", std::to_string(totalwaters));
     SASTOOLS_UTILS_H::logger("TOTAL WATERS IN HYDRATION", std::to_string(totalwaters));
 
     createSphericalCoordinateOfHydration();
@@ -2173,6 +2113,8 @@ void Waters::hydrateAtomisticModel(AtomisticModel & aModel) {
 void Waters::extractWatersFromAtomisticModel(AtomisticModel &model) {
 
     SASTOOLS_UTILS_H::logger("", "HYDRATING MODEL");
+
+    boost::regex ifOAtom("^[ ]?O['A-Z0-9]?+");
 
     auto waterLines = model.getPDBModel().getWaterLines();
     auto centering_vector = model.getPDBModel().getCenteringVector();
@@ -2192,9 +2134,10 @@ void Waters::extractWatersFromAtomisticModel(AtomisticModel &model) {
             z = std::strtof(line.substr(46,8).c_str(), nullptr);
 
             //Atom type taken from rows 13-16 needs to be converted to the actual atom, e.g., CB1 is C
-            atomType = line.substr(12,4) ;// needs to be this way until atomic numbers are assigned
+            atomType = line.substr(12,4);// needs to be this way until atomic numbers are assigned
             resiname = line.substr(17,3);
-            if (model.getPDBModel().ifOxygen(atomType)){
+
+            if (boost::regex_search(atomType, ifOAtom)){
                 hydration.emplace_back(Coords(x-centering_vector->x,y-centering_vector->y, z-centering_vector->z, atomType, 1.0, "HOH", count));
                 count++;
             }
@@ -2218,19 +2161,15 @@ void Waters::hydrateResidueDirect(std::string residue, int resid, int atomsInRes
     // reference is already centered
     std::string tempAtom;
 
-    //float rotation[9];
-    std::vector<float> tar_x = std::vector<float>();
-    std::vector<float> tar_y = std::vector<float>();
-    std::vector<float> tar_z = std::vector<float>();
-    std::vector<float> ref_x = std::vector<float>();
-    std::vector<float> ref_y = std::vector<float>();
-    std::vector<float> ref_z = std::vector<float>();
+    if ( sideChains.find(residue) == sideChains.end() ) { // not found
+//    if ( true ) { // not found
+            // If residue is not found, hydrate using tetrahedron model
+            // create tetrahedron around the atom, randomly rotate
+            // do this for each atom in residue
+            // remove clashes
 
-    // apply rotation and add delx, dely, delz to waters
-
-    if ( sideChains.find(residue) == sideChains.end() ) {
-        // not found
-        std::string note = "RESID " + std::to_string(resid) + " => " + residue;
+        boost::algorithm::trim(residue);
+        std::string note = "RESID " + std::to_string(resid) + " => _" + residue+"_";
         SASTOOLS_UTILS_H::logger("PSEUDO HYDRATING", note);
 
         boost::regex ifCarbon("^C[0-9]+?"); // match any character
@@ -2242,27 +2181,27 @@ void Waters::hydrateResidueDirect(std::string residue, int resid, int atomsInRes
         float min_y=FLT_MAX, max_y = -FLT_MAX;
         float min_z=FLT_MAX, max_z = -FLT_MAX;
 
-
         // random rotation
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        auto convert = (float)(M_PI/180.0f);
-        std::uniform_int_distribution<int> randomIndex(0,360); // guaranteed unbiased
-        std::uniform_int_distribution<int> randomBeta(0,180); // guaranteed unbiased
+//        std::random_device rd;
+//        std::mt19937 gen(rd());
+//        auto convert = (float)(M_PI/180.0f);
+//        std::uniform_int_distribution<int> randomIndex(0,360); // guaranteed unbiased
+//        std::uniform_int_distribution<int> randomBeta(0,180); // guaranteed unbiased
 
         std::vector <vector3> beads;
 
+        auto * pRes = SASTOOLS_RESIDUES_H::Residues::getResidue(residue);
+
         // remove waters too close and within range
         // needs to be van der Waals radii plus 1.4 Angstrom (radius of water?)
-
         for (int i=0; i<atomsInResidue; i++) {
 
             tempAtom = atomType[startAt + i];
 
-            // if atom type does not match C# where # can be any integer
+            // if atom type does not match C # where # can be any integer
             if (!boost::regex_match(tempAtom, ifCarbon)){
 
-                float radius = cbrtf(0.75/M_PI*SASTOOLS_UTILS_H::residueToVolume(tempAtom, residue));
+                float radius = pRes->getAtom(tempAtom)->getRadii();
 
                 // diameter of water is 2.8 Angstroms -
                 // water molecule should 1.4
@@ -2302,12 +2241,17 @@ void Waters::hydrateResidueDirect(std::string residue, int resid, int atomsInRes
         int totalBeads = beads.size();
         float rlimit = 2.81*2.81;
 
+        // move waters that are too close to molecule
         for (int i=0; i<atomsInResidue; i++) {
+
             tempAtom = atomType[startAt + i];
             at_x = xpos[startAt + i];
             at_y = ypos[startAt + i];
             at_z = zpos[startAt + i];
             vector3 cvec = vector3(at_x, at_y, at_z);
+
+            float radius = pRes->getAtom(tempAtom)->getGaussianRadii() + 1.4;
+            rlimit = radius*radius*0.9;
 
             for(int w=0; w<totalBeads; w++){ // sort the waters.  waters too close will be moved to end of the vector
                 auto pW = &beads[w];
@@ -2329,16 +2273,21 @@ void Waters::hydrateResidueDirect(std::string residue, int resid, int atomsInRes
         float limit = 2.65*2.65;
         for(int w=0; w<totalBeads; w++){ // sort the waters.  waters too close will be moved to end of the vector
             auto pCurrent = &beads[w];
+            vector3 tvec = vector3(*pCurrent);
 
+            int count = 1;
             for(int k=w+1; k<totalBeads; k++){
                 auto pNext = &beads[k];
                 if ( ( *pNext - *pCurrent).sqlength() < limit){
-                    *pCurrent = ( *pNext + *pCurrent)*0.5;
+                    //*pCurrent = ( *pNext + *pCurrent)*0.5;
+                    tvec += *pNext;
                     std::iter_swap(beads.begin()+k, beads.begin()+(totalBeads-1));
+                    count += 1;
                     totalBeads--;
                     k--;
                 }
             }
+            *pCurrent = tvec/(float)count;
 
             if (w >= totalBeads){
                 break;
@@ -2366,57 +2315,64 @@ void Waters::hydrateResidueDirect(std::string residue, int resid, int atomsInRes
 //        fprintf(pFile, "END\n");
 //        exit(0);
 
-    } else {
-        // get all atoms in the sideChain, includes backbone
+    } else { // residue in library hydrate with known hydration
+        std::vector<float> tar_x = std::vector<float>();
+        std::vector<float> tar_y = std::vector<float>();
+        std::vector<float> tar_z = std::vector<float>();
+        std::vector<float> ref_x = std::vector<float>();
+        std::vector<float> ref_y = std::vector<float>();
+        std::vector<float> ref_z = std::vector<float>();
 
+        // get all atoms in the sideChain, includes backbone
         auto findIt = sideChains.find(residue);
+        std::string centering_atom = centeringAtoms.find(residue)->second;
+
+        // need to add backbone for RNA - center on C4'
+        //if (false){
         if (findIt != sideChains.end()){
             auto psidechain = &(findIt->second); // std::unordered_map<std::string, Coords> >sideChains
-            float sum_x=0, sum_y=0, sum_z=0;
-            float at_x, at_y, at_z;
-            float sccount=0.0;
-            for (int i=0; i<atomsInResidue; i++) {
+            const float * at_x, * at_y, * at_z;
+            unsigned int centering_index=startAt;
+
+            for (int i=0; i< atomsInResidue; i++) {
 
                 tempAtom = atomType[startAt + i];
                 boost::algorithm::trim (tempAtom);
 
+                if (centering_atom == tempAtom){
+                    centering_index = startAt + i;
+                }
+
                 auto pAtom = psidechain->find(tempAtom);
-                if (pAtom != psidechain->end()){
+                if (pAtom != psidechain->end()){ //
+                    // DA, DT, DG, DC = P, OP1, OP2 and sugar atoms
+                    // Protein residues N, CA, CB, C, O
                     Coords *ptempCoord = &(*pAtom).second;
-                    at_x = xpos[startAt + i];
-                    at_y = ypos[startAt + i];
-                    at_z = zpos[startAt + i];
+                    at_x = &xpos[startAt + i];
+                    at_y = &ypos[startAt + i];
+                    at_z = &zpos[startAt + i];
 
-                    sum_x += at_x;
-                    sum_y += at_y;
-                    sum_z += at_z;
-
-                    tar_x.push_back(at_x); // atoms in residue in structure
-                    tar_y.push_back(at_y);
-                    tar_z.push_back(at_z);
+                    tar_x.push_back(*at_x); // atoms in residue in structure
+                    tar_y.push_back(*at_y);
+                    tar_z.push_back(*at_z);
 
                     ref_x.push_back(ptempCoord->x); // atoms in residue in library
                     ref_y.push_back(ptempCoord->y);
                     ref_z.push_back(ptempCoord->z);
-                    sccount += 1.0;
-                } else {
-                    std::string msg = " _"+ tempAtom + "_ " + std::to_string(resid);
-                    SASTOOLS_UTILS_H::logger("ALIGNMENT ATOM TYPE NOT FOUND", msg);
-//                    std::cout << "ATOM TYPES DEFINED FOR " << (*findIt).first << std::endl;
-//                    for(auto fit : (*findIt).second){
-//                        std::cout << "ATOM => " << " " << fit.first << std::endl;
-//                    }
-                }
+                } // else {
+//                    std::string msg = " _"+ tempAtom + "_ " + std::to_string(resid);
+//                    SASTOOLS_UTILS_H::logger("ALIGNMENT ATOM TYPE NOT FOUND", msg);
+//                    SASTOOLS_UTILS_H::logger("RENAME ATOM TYPE TO STANDARD", "i.e, C5M => C7");
+//                }
             }
 
             // create alignment vectors
-            float invSV = 1.0f/sccount;
-            float aveX = invSV*sum_x;
-            float aveY = invSV*sum_y;
-            float aveZ = invSV*sum_z;
+            float aveX = xpos[centering_index];
+            float aveY = ypos[centering_index];
+            float aveZ = zpos[centering_index];
 
             // center the residue in the structure
-            auto totalAtomsInResidue = (int)sccount;
+            auto totalAtomsInResidue = tar_x.size() ;//(int)sccount;
 
             for(int i=0; i < totalAtomsInResidue;i++){
                 tar_x[i] = tar_x[i] - aveX;
@@ -2429,19 +2385,73 @@ void Waters::hydrateResidueDirect(std::string residue, int resid, int atomsInRes
             //cout << "____HYDRATE___" << endl;
             int totalToAdd = placeWaters(residue, resid, aveX, aveY, aveZ);
             // copy into vector
-
             for(int m=0; m<totalToAdd; m++){
                 hydration.emplace_back( Coords(tempWaters[m]) );
             }
-
-        } else { // create water box and only take waters within 3 Angstroms of structure
-            // if residue not found, must come up with an alternative, right now, it is ignored
-
-
         }
 
-    }
+        // if nucleic, need to hydrate
+        //if (false){
+        if (residue == "rA" || residue == "rG" || residue == "rU" || residue == "rC" || residue == "rI" ||
+                residue == "DA" || residue == "DG" || residue == "DT" || residue == "DC"){
 
+            std::string bck = (residue == "DA" || residue == "DG" || residue == "DT" || residue == "DC") ? "DNA" : "RNA";
+
+            findIt = sideChains.find(bck);
+            centering_atom = centeringAtoms.find(bck)->second;
+
+            auto pBackbone = &(findIt->second); // std::unordered_map<std::string, Coords> >sideChains
+            unsigned int centering_index=startAt, index;
+
+            for (int i=0; i< atomsInResidue; i++) {
+
+                index = startAt + i;
+                tempAtom = atomType[index];
+                boost::algorithm::trim (tempAtom);
+
+                if (centering_atom == tempAtom){
+                    centering_index = index;
+                }
+
+                auto pAtom = pBackbone->find(tempAtom);
+                if (pAtom != pBackbone->end()){ //
+                    // DA, DT, DG, DC = P, OP1, OP2 and sugar atoms
+                    // Protein residues N, CA, CB, C, O
+                    Coords *ptempCoord = &(*pAtom).second;
+                    index = startAt + i;
+                    tar_x.push_back(xpos[index]); // atoms in residue in structure
+                    tar_y.push_back(ypos[index]);
+                    tar_z.push_back(zpos[index]);
+
+                    ref_x.push_back(ptempCoord->x); // atoms in residue in library
+                    ref_y.push_back(ptempCoord->y);
+                    ref_z.push_back(ptempCoord->z);
+                }
+            }
+
+            // create alignment vectors
+            float aveX = xpos[centering_index];
+            float aveY = ypos[centering_index];
+            float aveZ = zpos[centering_index];
+
+            // center the residue in the structure
+            auto totalAtomsInResidue = tar_x.size() ;//(int)sccount;
+
+            for(int i=0; i < totalAtomsInResidue;i++){
+                tar_x[i] = tar_x[i] - aveX;
+                tar_y[i] = tar_y[i] - aveY;
+                tar_z[i] = tar_z[i] - aveZ;
+            }
+
+            // rotate library residue into structure residue
+            setRotationMatrix(totalAtomsInResidue, &ref_x[0], &ref_y[0], &ref_z[0], &tar_x[0], &tar_y[0], &tar_z[0]);
+            int totalToAdd = placeWaters(bck, resid, aveX, aveY, aveZ);
+            // copy into vector
+            for(int m=0; m<totalToAdd; m++){
+                hydration.emplace_back( Coords(tempWaters[m]) );
+            }
+        }
+    }
 }
 
 
@@ -2552,6 +2562,7 @@ int Waters::placeWaters(std::string residue, int resid, float delX, float delY, 
 
     std::vector<Coords> * pwater = &waters[residue];
     auto total = (unsigned int)pwater->size();
+
     float x_val, y_val, z_val;// new_x, new_y, new_z;
 
     resetTempWaters();
@@ -2562,14 +2573,6 @@ int Waters::placeWaters(std::string residue, int resid, float delX, float delY, 
         y_val = pC->y;
         z_val = pC->z;
 
-//        new_x = rotation[0]*x_val + rotation[3]*y_val + rotation[6]*z_val + delX;
-//        new_y = rotation[1]*x_val + rotation[4]*y_val + rotation[7]*z_val + delY;
-//        new_z = rotation[2]*x_val + rotation[5]*y_val + rotation[8]*z_val + delZ;
-
-//        new_x = rotation[0]*x_val + rotation[1]*y_val + rotation[2]*z_val + delX;
-//        new_y = rotation[3]*x_val + rotation[4]*y_val + rotation[5]*z_val + delY;
-//        new_z = rotation[6]*x_val + rotation[7]*y_val + rotation[8]*z_val + delZ;
-
         Coords * pT = &tempWaters[i];
 
         pT->x = rotation[0]*x_val + rotation[1]*y_val + rotation[2]*z_val + delX;
@@ -2579,14 +2582,6 @@ int Waters::placeWaters(std::string residue, int resid, float delX, float delY, 
         pT->occ = pC->occ;
         pT->resid = resid;
         pT->resname = residue;
-
-//        tempWaters[i].x = new_x;
-//        tempWaters[i].y = new_y;
-//        tempWaters[i].z = new_z;
-//        tempWaters[i].type = "O";
-//        tempWaters[i].occ = (*pwater)[i].occ;
-//        tempWaters[i].resid = resid;
-//        tempWaters[i].resname = residue;
     }
 
     return total;
@@ -2608,7 +2603,12 @@ void Waters::writeWatersToFile(std::string name) {
     for(unsigned int i=0; i < totalwaters; i++){
         Coords * pCoord = &hydration[i];
         std::string resid = std::to_string(count);
-        fprintf(pFile, "%-6s%5i %4s %3s %1s%4s    %8.3f%8.3f%8.3f  1.00100.00\n", "ATOM", count, " O  ", "HOH", "W", resid.c_str(), pCoord->x, pCoord->y, pCoord->z);
+        fprintf(pFile, "%-6s%5i %4s %3s %1s%4s    %8.3f%8.3f%8.3f  %3.2f100.00\n", "ATOM", count, " O  ", "HOH", "W",
+                resid.c_str(),
+                pCoord->x,
+                pCoord->y,
+                pCoord->z,
+                pCoord->occ);
         count++;
     }
 
@@ -2638,11 +2638,12 @@ void Waters::translateAndWriteWatersToFile(std::string name, const vector3 * pCe
         Coords * pCoord = &hydration[i];
         std::string resid = std::to_string(count);
 
-        fprintf(pFile, "%-6s%5i %4s %3s %1s%4s    %8.3f%8.3f%8.3f  1.00100.00\n", "ATOM", count, " O  ", "HOH", "W",
+        fprintf(pFile, "%-6s%5i %4s %3s %1s%4s    %8.3f%8.3f%8.3f  %3.2f100.00\n", "ATOM", count, " O  ", "HOH", "W",
                 resid.c_str(),
                 pCoord->x + pCenVec->x,
                 pCoord->y + pCenVec->y,
-                pCoord->z + pCenVec->z);
+                pCoord->z + pCenVec->z,
+                pCoord->occ);
 
         count++;
     }
@@ -2740,7 +2741,7 @@ void Waters::calculatePartialAmplitudes(unsigned int lmax,
 
     float occupancies [totalwaters];
     for (unsigned int i=0; i< totalwaters; i++){
-        occupancies[i] = hydration[i].occ;
+        occupancies[i] = 1.0;//hydration[i].occ;
     }
 
     float * pR, *pI;

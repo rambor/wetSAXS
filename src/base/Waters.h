@@ -32,6 +32,7 @@
 #include <sastools/svd3.h>
 #include <sastools/vector3.h>
 #include <stdexcept>
+#include <random>
 
 class Waters {
 private:
@@ -44,7 +45,7 @@ private:
     std::map < std::string, float> minima;
 
     std::map < std::string, std::unordered_map<std::string, Coords> > sideChains;
-
+    std::map <std::string, std::string> centeringAtoms;
 
 private:
     std::map < std::string, std::vector<Coords> >waters;
@@ -60,6 +61,13 @@ private:
     SphericalHarmonics she;
     SphericalBessels sbj;
     unsigned int lmax;
+
+//    std::random_device rd;
+//    std::mt19937 gen(rd());
+    float convert = (float)(M_PI/180.0f);
+    std::mt19937 gen;
+    std::uniform_int_distribution<int> randomIndex;//(0,360); // guaranteed unbiased
+    std::uniform_int_distribution<int> randomBeta;//(0,180); // guaranteed unbiased
 
     Coords * tempWaters;
 

@@ -60,8 +60,8 @@ int nnls::optimize()
     if (out.iter % M == 0) {
       checkDescentUpdateBeta();
     }
-    if (out.iter % 10 == 0)
-      showStatus();
+//    if (out.iter % 10 == 0)
+//      showStatus();
   }
   showStatus();
   cleanUp();

@@ -1,9 +1,12 @@
 #include <iostream>
 #include <boost/program_options.hpp>
 #include <sastools/IofQData.h>
+#include <filesystem>
 #include "AtomisticModel.h"
 #include "Waters.h"
 #include "Fit.h"
+#include "Ensemble.h"
+#include "Aligner.h"
 
 namespace po = boost::program_options;
 namespace {
@@ -30,6 +33,16 @@ void checkUpperB(float upperB){
     }
 }
 
+// Comparator function
+bool comp(std::string a, std::string b) {
+
+    // first parameter should be greater than
+    // second one (for decreasing order)
+
+
+    return a > b;
+}
+
 int main(int argc, const char *const *argv) {
 
     std::string const FILES_KEY("pdb-files");
@@ -48,16 +61,17 @@ int main(int argc, const char *const *argv) {
 
     float cxlow = 0.8, cxhi = 1.5, dmax=0.0f, qmin = 0.001, qmax = 0.41;
 
-    float bfactor = 0.98, cx = 1.108, upperB=157;
+    float bfactor = 0.98, cx = 1.108, upperB=101;
 
     bool convertToAngstrom = false, forceRNA = false, keepWaters = false, noChiFree = false, singleFit = false,
-    writeWaters = false, invacuo=false, mixture=false, ensemble=false, background=false;
+    writeWaters = false, invacuo=false, mixture=false, ensemble=false, background=false, dmaxFilter = false,
+    align_and_map = false;
 
     int divisions = 101;
 
     int ns = 237, rounds = 5;
 
-    std::string datFile, atomFile;
+    std::string datFile, atomFile, listOfFiles;
     std::vector<std::string> filenames;
 
     boost::program_options::options_description generic("\n Usage: wetSAXS myPDBFile.pdb");
@@ -87,6 +101,8 @@ int main(int argc, const char *const *argv) {
             ("rounds,r", po::value<int>(&rounds), "Number of rounds for chi-free fitting - odd number")
             (",m", po::bool_switch(&mixture), "mixture model")
             (",e", po::bool_switch(&ensemble), "Ensemble fitting")
+            ("listOfFiles,p", po::value<std::string>(&listOfFiles), "Align and create density map from pdb list ")
+            (",u", po::bool_switch(&dmaxFilter), "Exclude models that exceed dmax in IofQ file during ensemble fitting")
             ("atomFile,t", po::value<std::string>(&atomFile), "form-factor file")
             ;
 
@@ -94,6 +110,9 @@ int main(int argc, const char *const *argv) {
 //    positionalOptions.add("pdb-file", 1);
 
     boost::program_options::options_description hidden("Hidden options");
+//    hidden.add_options()
+//            (FILES_KEY.c_str(), "list of PDB files");
+
     hidden.add_options()
             (FILES_KEY.c_str(), po::value(&filenames)->required(), "list of PDB files");
 
@@ -132,6 +151,13 @@ int main(int argc, const char *const *argv) {
             convertToAngstrom = true;
         }
 
+        // performs median-based SVD alignment using input file and suggested residue list
+        if (vm.count("listOfFiles")){ // perform alignment
+            //getcwd = boost::filesystem::path full_path(boost::filesystem::current_path());
+            Aligner alignit(listOfFiles, boost::filesystem::current_path().string());
+            alignit.align();
+            std::cout << " Align file " << std::endl;
+        }
 
         if (vm.count("bfactor") || vm.count("contrast")){
 
@@ -148,6 +174,12 @@ int main(int argc, const char *const *argv) {
             std::cout << "B-Factor " << bfactor << std::endl;
             std::cout << "Contrast " << cx << std::endl;
         }
+
+        if (vm.count("help") || !vm.count("pdb-files")) {
+            std::cout << generic << "\n";
+            return SUCCESS;
+        }
+
 
         if (datFile.empty()){ // simulate using specified cx anc bf values
 
@@ -171,7 +203,7 @@ int main(int argc, const char *const *argv) {
 
                 SASTOOLS_UTILS_H::logger("DMAX SET", std::to_string(dmax));
 
-                unsigned lmax = (unsigned int)((qmax*dmax)/SIMDE_MATH_PI) + 1;
+                unsigned lmax = 2*(unsigned int)((qmax*dmax)/SIMDE_MATH_PI) + 1;
                 SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
                 SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes MODEL");
                 model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues);
@@ -206,7 +238,7 @@ int main(int argc, const char *const *argv) {
 
             return 0;
 
-        } else { // fit data
+        } else if (!ensemble) { // fit data
 
             iofqdata = IofQData(datFile, convertToAngstrom);
             iofqdata.extractData(); // assume dmax is not set as data from other facilities will not be compatible with Scatter format
@@ -229,7 +261,6 @@ int main(int argc, const char *const *argv) {
             if (qmax < iofqdata.getQmax()){
                 iofqdata.truncateToQmax(qmax);
             }
-
 
             unsigned lmax = (unsigned int)((qmax*dmax)/SIMDE_MATH_PI) + 1;
             SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
@@ -345,7 +376,16 @@ int main(int argc, const char *const *argv) {
 
                             if (vm.count("bfactor") && vm.count("contrast")) { // fit using fixed bfactor and contrast
 
+                                // working set was set above to 3 times Shannon Number, but for fixed fitting should do all?
+                                iofqdata.setAllDataToWorkingSet();
+                                std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
+                                // recalculate Partials for the initial models
+                                waters.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
+                                model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
+
                                 fitting.fitFixedCxandBFactor(iofqdata, model, waters, bfactor, cx);
+                                // (qvalues, iofqdata.getFilename(), model);
+                                fitting.writeBestModelToFile(qvalues, iofqdata.getFilename(), model);
 
                             } else if (vm.count("bfactor")){ // search contrast with fixed bfactor
 
@@ -362,7 +402,6 @@ int main(int argc, const char *const *argv) {
                     } catch (std::string & fl){
                         SASTOOLS_UTILS_H::logger("Improper PDB file", "skipping..." + fl);
                     }
-
                 }
             }
 
@@ -373,6 +412,36 @@ int main(int argc, const char *const *argv) {
                 fprintf(pFile, line.c_str());
             }
             fclose(pFile);
+
+
+        } else if (ensemble){
+
+            Ensemble ens = Ensemble(filenames, std::filesystem::current_path().string());
+
+            iofqdata = IofQData(datFile, convertToAngstrom);
+            iofqdata.extractData();
+
+            if (iofqdata.getDmax() < 1 && !vm.count("dmax")) {
+                std::cerr << "ERROR: DMAX of dataset must be specified, not found in IofQ file" << std::endl;
+                return ERROR_IN_COMMAND_LINE;
+            } else if (iofqdata.getShannonBins() < 1) { // dmax is specified
+                iofqdata.setDmax(dmax); // dmax is specific to the experimental data, ideally, no model should exceed this....
+            } else {
+                dmax = iofqdata.getDmax();
+            }
+
+            // need to use qmax if specified otherwise stick to IofQ qmax
+            if (vm.count("qmax") > 0){
+                qmax = vm["qmax"].as<float>() < iofqdata.getQmax() ? vm["qmax"].as<float>() : iofqdata.getQmax();
+            }
+
+            // truncate q-values of iofqdata to specified qmax
+            if (qmax < iofqdata.getQmax()){
+                iofqdata.truncateToQmax(qmax);
+            }
+
+            ens.ce_search(iofqdata, cx, bfactor, dmaxFilter);
+            //ens.combinatorial_search(iofqdata, cx, bfactor);
 
         }
 
@@ -395,10 +464,10 @@ int main(int argc, const char *const *argv) {
 
     }
 
-    if (vm.count("help") || !vm.count("pdb-files")) {
-        std::cout << generic << "\n";
-        return SUCCESS;
-    }
+//    if (vm.count("help") || !vm.count("pdb-files")) {
+//        std::cout << generic << "\n";
+//        return SUCCESS;
+//    }
 
 
     return 0;

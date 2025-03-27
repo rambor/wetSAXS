@@ -175,6 +175,7 @@ void SphericalBessels::recalculate(int totalQvalues, std::vector<float> & qvalue
 
     int index = 0;
 
+    // calculate q*r for each q value
     for(int q = 0; q < qvaluesSize; q++) {
         float * pq = &qvalues[q];
         for (int i=0 ; i < numAtoms; i++) {

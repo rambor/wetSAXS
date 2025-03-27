@@ -50,7 +50,8 @@ AtomisticModel::AtomisticModel(std::string filename, bool forceRNA, bool keepWat
     const float * pYv = pdbModel.getCenteredYVec();
     const float * pZv = pdbModel.getCenteredZVec();
 
-    const int * pAtomicNumbers = pdbModel.getAtomicNumberVec();
+    //const int * pAtomicNumbers = pdbModel.getAtomicNumberVec();
+    const int * pAtomicNumbers = pdbModel.getAdjustedASFNumbers();
 
     float xval, yval, zval, rval;
 
@@ -69,40 +70,9 @@ AtomisticModel::AtomisticModel(std::string filename, bool forceRNA, bool keepWat
         atomList.insert(pAtomicNumbers[n]); // unique atomic numbers
     }
 
-    atomList.insert(99);  // 99 is unique for water
+    // need to reassign atomic numbers to include hydrogens
 
-    hydrogens = {
-            {"ALA", 7},
-            {"ASN", 8},
-            {"ASP", 7},
-            {"CYS", 7},
-            {"DA", 14},
-            {"DG", 11},
-            {"DC", 14},
-            {"DU", 13},
-            {"GLN", 10},
-            {"GLU", 9},
-            {"GLY", 5},
-            {"HIS", 11},
-            {"ILE", 24},
-            {"LEU", 13},
-            {"LYS", 14},
-            {"MET", 11},
-            {"PHE", 11},
-            {"PRO", 9},
-            {"SER", 7},
-            {"THR", 9},
-            {"TRP", 12},
-            {"TYR", 11},
-            {"VAL", 11},
-            {"rA", 14},
-            {"rG", 11},
-            {"rC", 14},
-            {"rU", 13},
-            {"HOH", 2},
-            {"AMP", 14},
-            {"GMP", 11}
-    };
+    atomList.insert(99);  // 99 is unique for water
 }
 
 /*
@@ -128,8 +98,7 @@ void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
         //sbj_x.recalculate(totalqvalues, qvalues, &bead_rvalues);
 
     } else {
-
-        createHCPGridModel(this->getDmax()/(float)lmax_plus_1);
+//        createHCPGridModel(this->getDmax()/(float)lmax_plus_1);
         // SHE depend on atomic coordinates (r, theta, phi)
         this->createSphericalHarmonics(lmax);
         //this->createSphericalHarmonicsEx();
@@ -138,7 +107,6 @@ void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
         this->createSphericalBessels(totalqvalues, qvalues);
         //this->createSphericalBesselsEx(totalqvalues, qvalues);
     }
-
 
     if (neighbors.empty()){
         this->createNeighborhoods(1.5*1.5);
@@ -171,10 +139,10 @@ void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
     float partialSumRAp, partialSumIAp, partialSumREx, partialSumIEx;
 
     auto pSBJ = sbj.getpSphericalBessels();
-    auto pAtomicNumbers = pdbModel.getAtomicNumberVec();
+    //auto pAtomicNumbers = pdbModel.getAtomicNumberVec();
+    auto pAtomicNumbers = pdbModel.getAdjustedASFNumbers();
 
     this->setFractionalVolume(29.9); // set fractional volume of the waters in excluded volume
-    this->setGaussianRadii();
 
     auto pReal = she.getpDataYLMReal();
     auto pImag = she.getpDataYLMImag();
@@ -312,7 +280,7 @@ void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
     }
 
     //calculateExVolPartialAmplitudes(lmax, totalqvalues, qvalues, recalculate);
-    std::cout << " Finished Partials - starting cross " << std::endl;
+    logger("------------------------------","------------------------------");
 
 //    float delta_r = pdbModel.getDmax()/(15*2);
 //    std::vector<float> sinqr_qr(15*2);
@@ -532,7 +500,7 @@ void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
     // calculate I(0) for protein and excluded volume
 
     try {
-        setMatchPointScale(pAtomicNumbers, fractionOccAtoms.data());
+        setMatchPointScale(pAtomicNumbers);
     } catch (std::overflow_error &e ){
         std::cout << e.what() << " :: ";
     }
@@ -686,34 +654,59 @@ void AtomisticModel::calculateExVolPartialAmplitudes(unsigned int lmax,
  * average electron density of a protein should be around 0.4 electrons per cubic Angstrom
  *
  */
-void AtomisticModel::setMatchPointScale(int * pAtomicNumbers, float * fractionalOccupancies){
+void AtomisticModel::setMatchPointScale(int * pAtomicNumbers){
 
     forwardScatteringParticle = 0.0f;
-    forwardScatteringExVolume = 0.0f;
+    float * gaussian_radii = pdbModel.getAtomicGaussianRadii();
 
     // water_asf at zero will be 10 electrons
     const float water_asf = functions_WETSAXS::asf_at_q_zero(99);
     float totalH2Os= 0;
     float diff;
 
+    // this should include hydrogens since using the unified form factors
     for(unsigned int n=0; n < totalAtoms; n++){ // over all atoms
         diff = functions_WETSAXS::asf_at_q_zero(pAtomicNumbers[n]);
         forwardScatteringParticle += diff*diff;
-        totalH2Os += fractionalOccupancies[n];
+    }
+
+    for(unsigned int n=0; n < totalAtoms; n++){ // over all atoms
+        unsigned int next_j = n+1;
+        float sumIt = 0;
+        for(unsigned int j=next_j; j < totalAtoms; j++){ // over all atoms
+            sumIt += functions_WETSAXS::asf_at_q_zero(pAtomicNumbers[j]);
+        }
+        forwardScatteringParticle += 2*functions_WETSAXS::asf_at_q_zero(pAtomicNumbers[n])*sumIt;
     }
 
     float pw_vol = 29.9*0.334; // 10 e_n
     float factor;
+    forwardScatteringExVolume = 0.0f;
 
     for(unsigned int i=0; i<totalAtoms; i++){
-        diff = gaussian_radii[i]/1.75;
+        diff = gaussian_radii[i]/1.75; // 1.75 is gaussian sphere radius of water
         factor = pw_vol*(1-diff*diff*diff);
-        diff = (water_asf - factor);
+        diff = (water_asf - factor); // if radius is same as water, no correction
         forwardScatteringExVolume += diff*diff; // normalized to volume of water, looking at fractions of water volume
     }
 
-//    forwardScatteringExVolume =  beads.size()*(water_asf - pw_vol*(1 - 0.6366*0.6366*0.6366/(1.75*1.75*1.75)));
-//    forwardScatteringExVolume *= forwardScatteringExVolume;
+    for(unsigned int n=0; n < totalAtoms; n++){ // over all atoms
+        unsigned int next_j = n+1;
+        diff = gaussian_radii[n]/1.75;
+        factor = pw_vol*(1-diff*diff*diff);
+        diff = (water_asf - factor);
+        float sumIt = 0;
+
+        for(unsigned int j=next_j; j < totalAtoms; j++){ // over all atoms
+            float vdiff = gaussian_radii[j]/1.75;
+            factor = pw_vol*(1-vdiff*vdiff*vdiff);
+            sumIt += (water_asf - factor);
+        }
+        forwardScatteringExVolume += 2*diff*sumIt;
+    }
+
+    //forwardScatteringExVolume += 377*377*pw_vol*pw_vol;
+    //forwardScatteringExVolume = forwardScatteringH2Os*0.334*0.334 + 1067*1067*pw_vol*pw_vol;
 
     forwardScatteringParticle = std::sqrtf(forwardScatteringParticle);
     forwardScatteringExVolume = std::sqrtf(forwardScatteringExVolume);
@@ -733,7 +726,7 @@ void AtomisticModel::setMatchPointScale(int * pAtomicNumbers, float * fractional
 
 
 /*
- * Unless the model includes hydrogens, it will only consider non-hydrogen atoms and will under-estimate forward scattering
+ * Model includes hydrogens implicitly through the unified form factors
  */
 void AtomisticModel::setMatchPointScale(unsigned int totalHydrationWaters){
 
@@ -742,8 +735,8 @@ void AtomisticModel::setMatchPointScale(unsigned int totalHydrationWaters){
     if (totalAtoms < 1 || forwardScatteringExVolume == 0)
         throw std::overflow_error("Divide by zero exception");
 
-    matchPoint = std::sqrtf((forwardScatteringParticle + water_asf)*(forwardScatteringParticle + water_asf)/( (forwardScatteringExVolume+water_asf)*(forwardScatteringExVolume+water_asf))); // divide by zero possible
-//    matchPoint = std::sqrtf((forwardScatteringParticle + water_asf)*(forwardScatteringParticle + water_asf)/(forwardScatteringExVolume*forwardScatteringExVolume)); // divide by zero possible
+    matchPoint = (forwardScatteringParticle + water_asf)/( (forwardScatteringExVolume+water_asf)); // divide by zero possible
+    //matchPoint = (forwardScatteringParticle)/( (forwardScatteringExVolume)); // divide by zero possible
 }
 
 
@@ -860,7 +853,8 @@ void AtomisticModel::calculatePartialAmplitudesNoExcludedVolume(unsigned int lma
     float bessel_product;
 
     auto pSBJ = sbj.getpSphericalBessels();
-    auto pAtomicNumbers = pdbModel.getAtomicNumberVec();
+    //auto pAtomicNumbers = pdbModel.getAtomicNumberVec();
+    auto pAtomicNumbers = pdbModel.getAdjustedASFNumbers();
 
     auto pRealYlm = she.getpDataYLMReal();
     auto pImagYlm = she.getpDataYLMImag();
@@ -909,13 +903,11 @@ void AtomisticModel::calculatePartialAmplitudesNoExcludedVolume(unsigned int lma
                 count++;
             }
         }
-
         q_index++;
     }
 
     double    runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
     logger("Partials TIME", formatNumber((float)runtime,8));
-
 }
 
 void AtomisticModel::populateBinnedDistances(unsigned int lmax){
@@ -946,7 +938,6 @@ void AtomisticModel::populateBinnedDistances(unsigned int lmax){
 //                std::cout << "greater than :: " << std::floor((vector3(pX[j], pY[j], pZ[j])-vec1).length()*inv_delta) << " " << lmax << std::endl;
 //            }
 //            binned_distances[counter] = std::floor((vector3(pX[j], pY[j], pZ[j])-vec1).length()*inv_delta);
-
             counter++;
         }
 
@@ -1182,7 +1173,7 @@ void AtomisticModel::createHCPGridModel(float bin_width){
 
         vector3 temp = (a1 * n1_index + a2 * n2_index + a3 * n3_index);
 
-        if (tempLine.size() > 3){ // determine if need ot add or subtract the basis
+        if (tempLine.size() > 3){ // determine if need to add or subtract the basis
             temp = temp + basis2;
         }
 
@@ -1290,3 +1281,5 @@ void AtomisticModel::createHCPGridModel(float bin_width){
 
     // calculate scattering from the beads as my Solvent mask
 }
+
+

@@ -1,0 +1,9 @@
+# Reference file is always the first one in list
+
+ALIGNMENT_RESIDS 10to101A
+bsa_md_1_7.pdb
+bsa_md_1_9.pdb
+bsa_md_1_70.pdb
+bsa_md_1_100.pdb
+bsa_md_1_200.pdb
+bsa_md_1_300.pdb
