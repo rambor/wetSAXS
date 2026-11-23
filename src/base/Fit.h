@@ -43,6 +43,7 @@ class Fit {
     float high_c_occ = 1.21, low_c_occ = 0.1;
     const float inv16Pi2 = 1.0/(16.0*M_PI_2);
 
+    std::vector<unsigned int> partialRows; // working-set row -> partials row (empty: identical)
     std::vector<float> norm_aPs;
     std::vector<float> norm_aWs;
     std::vector<float> norm_aCs;

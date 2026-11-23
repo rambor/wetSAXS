@@ -78,7 +78,6 @@ class AtomisticModel {
 
     // setup for dynamically allocated arrays
     std::vector<float> rvalues;
-    std::vector<float> paired_r_values;
     std::vector<float> thetas; // could be aligned memory
     std::vector<float> phis;
     std::vector<float> bead_rvalues;
@@ -91,18 +90,9 @@ class AtomisticModel {
     std::vector<float> almRealExcludedVolSum; // partial sums
     std::vector<float> almImagExcludedVolSum;
 
-    std::vector<float> clmNonNeighbors, clmNeighbors;
-
     std::vector<float> binnedPartials;
 
     std::set <int> atomList;
-
-    //std::map <std::string, int> hydrogens;
-    //    std::map<unsigned int, std::vector<unsigned int>> neighbors;
-    std::vector<unsigned int> neighbor_indices;   // all neighbors concatenated
-    std::vector<float>        neighbor_weights;
-    std::vector<unsigned int> neighbors_offset;
-    //    std::unordered_map<std::pair<uint64_t, uint64_t>, float, HashPair> weight_map;
 
     std::vector<float> fractionOccAtoms;
     std::vector<Bead> beads;
@@ -144,7 +134,6 @@ public:
         forwardScatteringExVolume = model.forwardScatteringExVolume;
 
         rvalues = std::move(model.rvalues);
-        paired_r_values = std::move(model.paired_r_values);
 
         thetas = std::move(model.thetas);
         phis = std::move(model.phis);
@@ -159,15 +148,8 @@ public:
         almRealExcludedVolSum = std::move(model.almRealExcludedVolSum); // partial sums
         almImagExcludedVolSum = std::move(model.almImagExcludedVolSum);
 
-        clmNonNeighbors = std::move(model.clmNonNeighbors);
-        clmNeighbors = std::move(model.clmNeighbors);
-
         binnedPartials = std::move(model.binnedPartials);
         atomList = std::move(model.atomList);
-
-        neighbor_indices = std::move(model.neighbor_indices);
-        neighbor_weights = std::move(model.neighbor_weights);
-        neighbors_offset = std::move(model.neighbors_offset);
 
         fractionOccAtoms = std::move(model.fractionOccAtoms);
         beads = std::move(model.beads);
@@ -210,9 +192,6 @@ public:
     const float * getExcludedVolumePartialsReal() { return almRealExcludedVolSum.data();} // partial sums
     const float * getExcludedVolumePartialsImag(){ return almImagExcludedVolSum.data();}
 
-    const float * getExcludedVolumeIntensitiesNeighbors(){ return clmNeighbors.data(); }
-    const float * getExcludedVolumeIntensitiesNonNeighbors(){ return clmNonNeighbors.data(); }
-
     const float * getBinnedPartials() { return binnedPartials.data();}
 
     std::vector<float> * getRValuesVector() { return &rvalues;}
@@ -248,9 +227,7 @@ public:
 
     void createHCPGridModel(float bin_width);
 
-    float addUp(unsigned int total_width, float *vector_to_sum);
-
-    void populateExVolumeWeights(Waters &waterModel);
+    //float addUp(unsigned int total_width, float *vector_to_sum);
 
     void populateSphBesselsArray(int l, std::vector<float> &qr, float *bessel_alq);
 
@@ -317,16 +294,6 @@ public:
     SphericalHarmonics & getSHE(){ return she;}
 
     SphericalBessels & getSBJ() { return sbj;}
-
-    void createNeighborhoods(float cutoff);
-
-    void createSphericalHarmonicsEx();
-
-    void createSphericalBesselsEx(unsigned int totalqvalues, std::vector<float> &qvalues);
-
-    void calculateExVolPartialAmplitudes(unsigned int lmax, unsigned int totalqvalues, std::vector<float> &qvalues,
-                                         bool recalculate);
-
 
     float calculateRg(){
         const int * pAtomicNumbers = pdbModel.getAtomicNumberVec();

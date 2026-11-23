@@ -1,3 +1,4 @@
+
 // Copyright (c) 2022.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +23,9 @@
 //
 
 #include "AtomisticModel.h"
+
+#include <algorithm>
+#include <chrono>
 
 #include "Waters.h"
 #include "water_shell.h"
@@ -68,7 +72,7 @@ AtomisticModel::AtomisticModel(std::string filename, bool forceRNA, bool keepWat
         rval = sqrtf(xval*xval + yval*yval + zval*zval);
 
         rvalues[n] = rval;
-        thetas[n] = acosf(zval/rval);
+        thetas[n] = (rval > 0.0f) ? acosf(zval/rval) : 0.0f;
         phis[n] = (xval == 0 || xval == 0.0f) ? 0.0f : atan2f(yval, xval); // need to check if this is a good way to test for 0
 
         atomList.insert(pAtomicNumbers[n]); // unique atomic numbers
@@ -80,557 +84,207 @@ AtomisticModel::AtomisticModel(std::string filename, bool forceRNA, bool keepWat
 }
 
 /*
+ * Partial amplitudes for the particle (A_p) and its excluded volume (A_x).
+ *
  * Total partials per q value is (lmax+1)^2
- * Total partials im array is totalqvalues*(lmax+1)*(lmax+1)
- * A_lm(q_i) index is given by (l*l + (l-m)*q_index
+ * Total partials in array is totalqvalues*(lmax+1)*(lmax+1)
+ * A_lm(q_i) index is (lmax+1)^2*q_index + l*l + l + m
  *
- * Excluded volume is calculated at the same coordinates of the particle's atoms but uses atomic scattering form factor for water
+ * A_p : real atomic form factors (unified atoms)
+ * A_x : displaced bulk solvent at the same coordinates. Each atom carries a smooth (Gaussian) blob of
+ *       bulk water with the atom's volume V_k, written as a Gaussian water minus the part of the water
+ *       that does not fit:
+ *           g_k(q) = G(q; 29.9) - G(q; 29.9 - V_k),   G(q; V) = 0.334 V exp(-q^2 V^(2/3) / 4pi)
+ *       At q = 0, g_k = 0.334 V_k (electrons of solvent displaced).
+ *       A_x is stored with a POSITIVE sign; Babinet's minus sign is applied in Fit (-c_x A_xw).
  *
+ * Only the particle's own atoms (n < pdbModel.getTotalCoordinates()) are summed. Hydration waters are
+ * handled by the Waters class (A_w and their displaced bulk water), never here.
+ *
+ * The solvent-fluctuation term (g(r) of water) is an intensity and is NOT part of these amplitudes.
  */
 void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
                                                 unsigned int totalqvalues,
                                                 std::vector < float > & qvalues,
                                                 bool recalculate){
 
-    pdbModel.writeCenteredCoordinatesToFile("bsa_centered");
-    auto totalPDBAtoms = pdbModel.getTotalCoordinates();
+    const unsigned int totalPDBAtoms = pdbModel.getTotalCoordinates();
     this->lmax = lmax;
-    unsigned int bessel_index, q_index=0, lmax_plus_1 = lmax + 1, index;
+    const unsigned int lmax_plus_1 = lmax + 1;
 
     if (recalculate){
-
         sbj.recalculate(totalqvalues, qvalues, &rvalues);
-        //sbj_x.recalculate(totalqvalues, qvalues, &bead_rvalues);
-
     } else {
-//        createHCPGridModel(this->getDmax()/(float)lmax_plus_1);
-        // SHE depends on atomic coordinates (r, theta, phi)
-        this->createSphericalHarmonics(lmax);
-        //this->createSphericalHarmonicsEx();
-
-        // SBJ depends on qvalues and r
-        this->createSphericalBessels(totalqvalues, qvalues);
-        //this->createSphericalBesselsEx(totalqvalues, qvalues);
+        this->createSphericalHarmonics(lmax);               // depends on (theta, phi)
+        this->createSphericalBessels(totalqvalues, qvalues); // depends on q and r
     }
 
-    // if (neighbors.empty()){
-         this->createNeighborhoods(10.1*10.1);
-    // }
+    const unsigned int partialsPerQ = lmax_plus_1*lmax_plus_1;
+    almRealSum.resize(partialsPerQ*totalqvalues);
+    almImagSum.resize(partialsPerQ*totalqvalues);
+    almRealExcludedVolSum.resize(partialsPerQ*totalqvalues);
+    almImagExcludedVolSum.resize(partialsPerQ*totalqvalues);
 
-    // for each q-value calculate atomic scattering form factor
-    // need to assemble into partial sums at each q-value?
+    float * const ptrRAlm = almRealSum.data();
+    float * const ptrIAlm = almImagSum.data();
+    float * const ptrREx = almRealExcludedVolSum.data();
+    float * const ptrIEx = almImagExcludedVolSum.data();
 
-    std::map<int, float> asf; // for each q-value, this is calculated over the number of unique atoms
+    const float * pSBJ = sbj.getpSphericalBessels();
+    const int * pASF = pdbModel.getAdjustedASFNumbers();
+    const float * pVol = pdbModel.getAtomicVolumeVec();
+    const float * pReal = she.getpDataYLMReal();
+    const float * pImag = she.getpDataYLMImag();
 
-    for(auto & atom : atomList){ // water is element 99
-        asf.insert(std::pair<int, float>(atom, 0.0f));
+    // unique ASF codes -> slot, so each thread evaluates each form factor once per q
+    const std::vector<int> uniqueASF(atomList.begin(), atomList.end());
+    std::vector<int> slotOfAtom(totalPDBAtoms);
+    for(unsigned int n = 0; n < totalPDBAtoms; n++){
+        slotOfAtom[n] = (int)(std::lower_bound(uniqueASF.begin(), uniqueASF.end(), pASF[n]) - uniqueASF.begin());
     }
 
-    // total partial amplitudes is (lmax+1)^2 per q-value
-    almRealSum.resize((lmax+1)*(lmax+1)*totalqvalues);
-    almImagSum.resize((lmax+1)*(lmax+1)*totalqvalues);
+    const float rho0 = 0.334f;                 // bulk water, electrons per A^3
+    const float vWater = 29.9f;                // volume of one water, A^3
+    const float inv4pi = 1.0f/(4.0f*(float)M_PI);
+    const float waterWidth = std::cbrt(vWater*vWater)*inv4pi;
 
-    almRealExcludedVolSum.resize((lmax+1)*(lmax+1)*totalqvalues); // partial sums
-    almImagExcludedVolSum.resize((lmax+1)*(lmax+1)*totalqvalues);
+    // q-independent parts of the leftover Gaussian, G(q; dV) = leftAmp * exp(-q^2 * leftWidth),
+    // with dV = 29.9 - V_k (may be negative for atoms larger than a water)
+    std::vector<float> leftAmp(totalPDBAtoms), leftWidth(totalPDBAtoms);
+    for(unsigned int n = 0; n < totalPDBAtoms; n++){
+        const float dV = vWater - pVol[n];
+        leftAmp[n]   = rho0*dV;
+        leftWidth[n] = std::cbrt(dV*dV)*inv4pi;
+    }
 
-    float * const ptrRAlm = (totalAtoms != 0) ? almRealSum.data() : nullptr;
-    float * const ptrIAlm = (totalAtoms != 0) ? almImagSum.data() : nullptr;
+    // stride of the bessel and ylm tables is totalAtoms (may include appended waters)
+    const unsigned long lmax_plus_1_totalAtoms = (unsigned long)lmax_plus_1*totalAtoms;
+    const int totalQ = (int)qvalues.size();
 
-    float * const ptrREx = (totalAtoms != 0) ? almRealExcludedVolSum.data() : nullptr;
-    float * const ptrIEx = (totalAtoms != 0) ? almImagExcludedVolSum.data() : nullptr;
+    auto startTime = std::chrono::steady_clock::now();
 
-    float *pYLM, *pYLMI, bessel_product, bessel_product_Ex, waterASF, * pBessel;
-    float *pYLMEx, *pYLMExI, *pBesselEx;
+    // each q writes only its own block of partials: q values are independent
+    #pragma omp parallel
+    {
+        std::vector<float> ffq(uniqueASF.size()), fp(totalPDBAtoms), fx(totalPDBAtoms);
 
-    float partialSumRAp, partialSumIAp, partialSumREx, partialSumIEx;
-    float sumExCrossTerm, sumExSelfTerm, weight;
+        #pragma omp for schedule(dynamic)
+        for(int q_index = 0; q_index < totalQ; q_index++){
 
-    auto pSBJ = sbj.getpSphericalBessels();
-    //auto pAtomicNumbers = pdbModel.getAtomicNumberVec();
-    auto pAtomicNumbers = pdbModel.getAdjustedASFNumbers(); // does not include the hydration
-
-    //this->setFractionalVolume(29.9); // set fractional volume of the waters in excluded volume
-
-    auto pReal = she.getpDataYLMReal();
-    auto pImag = she.getpDataYLMImag();
-
-    std::clock_t startTime = std::clock();
-    //double runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
-    unsigned int lmax_plus_1_totalAtoms = lmax_plus_1*totalAtoms;
-    unsigned int long ylm_index, base_index, temp_index;
-
-    unsigned int totalWeights = neighbor_weights.size();
-    std::vector<float> bessel_weights(totalWeights);
-    auto * pRealYLMEx = (float *)_aligned_malloc(sizeof(float)*totalWeights, 16); // aligned memory
-    auto * pImagYLMEx = (float *)_aligned_malloc(sizeof(float)*totalWeights, 16); // aligned memory
-    auto * pWeightedBessels = (float *)_aligned_malloc(sizeof(float)*totalWeights, 16); // aligned memory
-    auto * pQRvalues = (float *)_aligned_malloc(sizeof(float)*totalWeights, 16); // aligned memory
-    float qr;
-
-    for(auto & qvalue : qvalues){
-
-        for(auto & ff : asf){ // calculate atomic scattering form factors for given qvalue
-            ff.second = functions_WETSAXS::asf(ff.first, qvalue);
-        }
-
-        waterASF = asf[99];//functions_WETSAXS::asf(99, qvalue);
-
-        //  this->setFractionalVolumeAtQ(qvalue);
-
-        // populate qr values
-        unsigned int ll_index = (lmax+1)*(lmax+1)*q_index;// + l*l + l + m;
-
-        float intensity = calculateStructureFactorWaterAtQ(qvalue);
-        float temp, bessel_products, bessel_products_real, bessel_products_imag, * pTemp;
-
-        for(int l=0; l<=lmax; l++){
-
-            bessel_index = lmax_plus_1_totalAtoms*q_index + totalAtoms*l;
-            base_index = (l*l)*totalAtoms; // always positive
-
-            // calculate spherical bessels for given q, l over all atoms
-            // populateSphBesselsArray(l, qr, bessel_at_ql);
-            /*
-             * for m = 0
-             */
-            // for given (l,m) calculate Spherical Harmonic
-            partialSumRAp = 0.0f;
-
-            // excluded volume term based on atomic coordinates
-            partialSumREx = 0.0f;
-            partialSumIEx = 0.0f;
-
-            sumExCrossTerm = 0.0f;
-            sumExSelfTerm = 0.0f;
-
-            ylm_index = base_index + l * totalAtoms; // for m = 0
-
-            /*
-             * for m = 0
-             */
-            startTime = std::clock();
-            // neighbor_indices and neighbor_weights are long vectors > totalAtoms
-            for (unsigned int n = 0; n < totalWeights; n++) { // over all atoms including hydration waters
-                    auto *pIndex = &neighbor_indices[n];
-                    pWeightedBessels[n] = neighbor_weights[n] * pSBJ[bessel_index + *pIndex];
-                    pRealYLMEx[n] = pWeightedBessels[n] * pReal[ylm_index + *pIndex];
+            const float qvalue = qvalues[q_index];
+            for(size_t k = 0; k < uniqueASF.size(); k++){
+                ffq[k] = functions_WETSAXS::asf(uniqueASF[k], qvalue);
             }
 
-            // two cross term sums - one is Ap-Am and the other is Ax-Am where real and imaginary terms need to be kept separate
-            // Am cross-terms will be generated using a different algorithm (Mask class)
-            // Ax and Ap can be summed directly
+            const float q2 = qvalue*qvalue;
+            const float gWater = rho0*vWater*std::exp(-q2*waterWidth);
 
-            for (unsigned int n = 0; n < totalAtoms; n++) { // over all atoms
-                pBessel = &pSBJ[bessel_index + n];
-                //bessel_product = asf[pAtomicNumbers[n]] * *pBessel; // for each m value, using same bessel values at l
-                //bessel_product_Ex = (waterASF - fractionOccAtoms[n]) * *pBessel; // for estimating excluded volume using water ASF
-
-                // real term for spherical harmonic
-                pYLM = &pReal[ylm_index];
-                //partialSumRAp += bessel_product * *pYLM;
-                partialSumRAp += ( n < totalPDBAtoms  ? asf[pAtomicNumbers[n]] : waterASF)* *pBessel * *pYLM;
-                //imaginary term is zero since sin(m*theta) with m = 0 is always zero.
-                //partialSumREx += bessel_product_Ex * *pYLM;  // excluded volume, real
-
-                //pYLM = &pImag[ylm_index];
-                //partialSumIAp += bessel_product * *pYLM;    // particle, imaginary
-                //partialSumIEx += bessel_product_Ex * *pYLM; // excluded volume, imaginary
-
-                // excluded volume must be a separate calculation that uses the weights and waterASF
-                temp = *pBessel * *pYLM; // shall be scaled by Water ASF
-                sumExSelfTerm += temp*temp; // self term
-                // now do the weighted cross-term
-                bessel_products = 0;
-                for (unsigned int v =neighbors_offset[n]; v < neighbors_offset[n+1]; v++) { // over all atoms including hydration waters
-                    bessel_products += pRealYLMEx[v];
-                }
-
-                sumExCrossTerm += temp * bessel_products;
-                ++ylm_index;
+            for(unsigned int n = 0; n < totalPDBAtoms; n++){
+                fp[n] = ffq[slotOfAtom[n]];
+                fx[n] = gWater - leftAmp[n]*std::exp(-q2*leftWidth[n]);
             }
-            //std::cout << qvalue << " " << l << " " << partialSumAEx << std::endl;
-            // 0.000015 sec without internal loop
-            // 0.0061
-            // weighted_sum = addUp(totalWeights, pRealYLMEx);
-            // std::cout << " RUN TIME " << (std::clock() - startTime)/(double) CLOCKS_PER_SEC << std::endl;
 
-            int partials_index = ll_index + l*l + l;
+            const unsigned int ll_index = partialsPerQ*(unsigned int)q_index;
 
-            // particle scattering for m=0
-            ptrRAlm[partials_index] = partialSumRAp; // need to keep the partials for fitting
-            ptrIAlm[partials_index] = 0;// sum is zero due to sin(0) = 0 where m = 0;
+            for(int l=0; l<=(int)lmax; l++){
 
-            // excluded volume scattering for m=0
-            // sum f^2 + 2 * sum f_i*f_j for j > i
-            sumExCrossTerm *= 2;
-            sumExCrossTerm += sumExSelfTerm; // excluded volume I(q) for m = 0 at given l
-            ptrREx[partials_index] = waterASF*waterASF*sumExCrossTerm;// partialSumREx; // uses volume fraction with assigned waters
+                const unsigned long bessel_index = lmax_plus_1_totalAtoms*q_index + (unsigned long)totalAtoms*l;
+                const unsigned long base_index = (unsigned long)(l*l)*totalAtoms;
+                const unsigned int partials_index = ll_index + l*l + l;
 
-            //intensity += waterASF*waterASF*sumExCrossTerm;
-            ptrIEx[partials_index] = 0;; // final should be negative of the amplitude (Babinet's)
+                // m = 0 : imaginary part of Y_l0 is zero
+                {
+                    double sumRAp = 0.0, sumREx = 0.0;
+                    unsigned long ylm_index = base_index + (unsigned long)l*totalAtoms;
 
-            // biggest time saving will be here, need to exploit the symmetry of spherical hamormonics (for m = -m)
-            for(int m=1; m<=l; m++) {
-
-                // for given (l,m) calculate Spherical Harmonic
-                partialSumRAp = 0.0f;
-                partialSumIAp = 0.0f;
-
-                // excluded volume term based on atomic coordinates
-                partialSumREx = 0.0f;
-                partialSumIEx = 0.0f;
-
-                sumExCrossTerm = 0.0f;
-                sumExSelfTerm = 0.0f;
-
-                ylm_index = base_index + (l + m) * totalAtoms; // incorrect
-
-                for (unsigned int n = 0; n < totalWeights; n++) { // over all atoms including hydration waters
-                    temp_index = ylm_index + neighbor_indices[n];
-                    pTemp = &pWeightedBessels[n];
-
-                    pRealYLMEx[n] = *pTemp * pReal[temp_index]; // each value is specified by l and m
-                    pImagYLMEx[n] = *pTemp * pImag[temp_index];
-                }
-
-
-                // for each (l,m) calculate partial sum at given q value
-                float real_product = 0, imaginary_product = 0;
-                for (unsigned int n = 0; n < totalAtoms; n++) { // over all atoms
-
-                    pBessel = &pSBJ[bessel_index + n];
-                    bessel_product = ( n < totalPDBAtoms  ? asf[pAtomicNumbers[n]] : waterASF)* *pBessel;
-                    //bessel_product_Ex = (waterASF - fractionOccAtoms[n]) * *pBessel; // for estimating excluded volume using water ASF
-                    //bessel_product_Ex = waterASF * *pBessel; // for estimating excluded volume using water ASF
-
-                    // in using the radial distribution function, we need to discount the waters based on cross-term correspondences, so waters far from each other have no correlation
-                    // real term
-                    pYLM = &pReal[ylm_index];
-                    //real_product = bessel_product * *pYLM;     // particle, real
-                    //partialSumRAp += real_product;     // particle, real
-                    partialSumRAp += bessel_product* *pYLM;
-                    //partialSumREx += bessel_product_Ex * *pYLM;  // excluded volume, real
-
-                    // imaginary term
-                    pYLMI = &pImag[ylm_index];
-                    //imaginary_product = bessel_product * *pYLMI;
-                    partialSumIAp += bessel_product* *pYLMI;    // particle, imaginary
-                    //partialSumIEx += bessel_product_Ex * *pYLMI; // excluded volume, imaginary
-
-                    // r = 0, self term for each position
-                    sumExSelfTerm += (*pYLM * *pYLM + *pYLMI * *pYLMI)* *pBessel* *pBessel;
-
-                    bessel_products_real = 0;
-                    bessel_products_imag = 0;
-                    for (unsigned int v =neighbors_offset[n]; v < neighbors_offset[n+1]; v++) { // over all atoms including hydration waters
-                        bessel_products_real += pRealYLMEx[v];
-                        bessel_products_imag += pImagYLMEx[v];
+                    for(unsigned int n = 0; n < totalPDBAtoms; n++, ylm_index++){
+                        const float by = pSBJ[bessel_index + n]*pReal[ylm_index];
+                        sumRAp += fp[n]*by;
+                        sumREx += fx[n]*by;
                     }
-                    //complete the cross-term products and add to running total
-                    real_product += bessel_products_real * *pBessel * *pYLM;
-                    imaginary_product += bessel_products_imag * *pBessel * *pYLMI;
 
-                    ++ylm_index;
+                    ptrRAlm[partials_index] = (float)sumRAp;
+                    ptrIAlm[partials_index] = 0.0f;
+                    ptrREx[partials_index] = (float)sumREx;
+                    ptrIEx[partials_index] = 0.0f;
                 }
 
-                int update_index = partials_index + m;
+                // m > 0, and m < 0 by symmetry of a real density: A_{l,-m} = (-1)^m conj(A_{l,m})
+                for(int m=1; m<=l; m++) {
 
-                // particle scattering
-                // for m > 0
-                ptrRAlm[update_index] = partialSumRAp;
-                ptrIAlm[update_index] = partialSumIAp;
+                    double sumRAp = 0.0, sumIAp = 0.0, sumREx = 0.0, sumIEx = 0.0;
+                    unsigned long ylm_index = base_index + (unsigned long)(l + m)*totalAtoms;
 
-                // excluded volume
-                // intensity is the sum of the squared amplitudes at each l,
-                ptrREx[update_index] = waterASF*waterASF*(sumExSelfTerm + 2*(real_product + imaginary_product)); // update at l, m
-                ptrIEx[update_index] = 0;//partialSumIEx; //
+                    for(unsigned int n = 0; n < totalPDBAtoms; n++, ylm_index++){
+                        const float b = pSBJ[bessel_index + n];
+                        const float yR = b*pReal[ylm_index];
+                        const float yI = b*pImag[ylm_index];
+                        sumRAp += fp[n]*yR;
+                        sumIAp += fp[n]*yI;
+                        sumREx += fx[n]*yR;
+                        sumIEx += fx[n]*yI;
+                    }
 
-                //intensity += 2*ptrREx[update_index]; // 2x is for m and -m
+                    const float rAp = (float)sumRAp, iAp = (float)sumIAp, rEx = (float)sumREx, iEx = (float)sumIEx;
 
-                // partials_index = ll_index + l*l + l;
-                // for m < 0
-                update_index = partials_index - m;
-                ptrREx[update_index] = waterASF*waterASF*(sumExSelfTerm + 2*(real_product + imaginary_product)); // The squared sum is same for -m and m
+                    unsigned int idx = partials_index + m;
+                    ptrRAlm[idx] = rAp;  ptrIAlm[idx] = iAp;
+                    ptrREx[idx]  = rEx;  ptrIEx[idx]  = iEx;
 
-                if (m & 1) { // if m is odd, flip sign of the real part
-                    // std::cout << count << " ( " << (partials_index -m) <<  " ) "  << ptrRAlm[partials_index -m] << " " << (-1*partialSumRAp) << std::endl;
-                    // particle scattering
-                    ptrRAlm[update_index] = -partialSumRAp;
-                    ptrIAlm[update_index] = partialSumIAp;
-
-                    // excluded volume scattering  - remember to flip sign for Babinet's
-                    // ptrREx[update_index] = -partialSumREx; // uses volume fraction with assigned waters
-                    ptrIEx[update_index] = partialSumIEx;  //
-
-                } else { // if m is even, flip sign of the Imaginary part
-                    // std::cout << count << " ( " << (partials_index -m) <<  " ) "  << ptrIAlm[partials_index -m] << " " << (-1*partialSumIAp) << std::endl;
-                    // particle scattering
-                    ptrRAlm[update_index] = partialSumRAp;
-                    ptrIAlm[update_index] = -partialSumIAp;
-
-                    // excluded volume scattering - remember to flip sign for Babinet's
-                    //ptrREx[update_index] = partialSumREx;  // uses volume fraction with assigned water
-                    ptrIEx[update_index] = -partialSumIEx; //
+                    idx = partials_index - m;
+                    if (m & 1) { // odd m: flip sign of the real part
+                        ptrRAlm[idx] = -rAp; ptrIAlm[idx] = iAp;
+                        ptrREx[idx]  = -rEx; ptrIEx[idx]  = iEx;
+                    } else {     // even m: flip sign of the imaginary part
+                        ptrRAlm[idx] = rAp;  ptrIAlm[idx] = -iAp;
+                        ptrREx[idx]  = rEx;  ptrIEx[idx]  = -iEx;
+                    }
                 }
             }
         }
-
-        //intensity *= waterASF*waterASF;//*(1 + 4*M_PI*0.0334*addUp(totalWeights, pQRvalues));
-
-        // print out
-       std::cout << qvalue << " " << intensity << std::endl;
-        ++q_index;
     }
-
-exit(0);
-    //calculateExVolPartialAmplitudes(lmax, totalqvalues, qvalues, recalculate);
-    logger("------------------------------","------------------------------");
-
-    // calculate I(0) for protein and excluded volume
 
     try {
-       // pAtomicNumbers = pdbModel.getAtomicNumberVec();
-        setMatchPointScale(pAtomicNumbers);
+        setMatchPointScale(pdbModel.getAdjustedASFNumbers());
     } catch (std::overflow_error &e ){
         std::cout << e.what() << " :: ";
     }
 
-    double runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
-
-    //    this->writeInVacuoModel(lmax, totalqvalues, qvalues);
+    const double runtime = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
     logger("Total TIME (Model)", formatNumber((float)runtime,8));
 }
 
-
-void AtomisticModel::calculateExVolPartialAmplitudes(unsigned int lmax,
-                                                     unsigned int totalqvalues,
-                                                     std::vector < float > & qvalues,
-                                                     bool recalculate){
-
-    unsigned int bessel_index, q_index=0, lmax_plus_1 = lmax + 1;
-    float *pYLM, bessel_product_Ex, waterASF, * pBessel;
-    float partialSumREx, partialSumIEx;
-
-    almRealExcludedVolSum.resize((lmax+1)*(lmax+1)*totalqvalues);; // partial sums
-    almImagExcludedVolSum.resize((lmax+1)*(lmax+1)*totalqvalues);
-
-    float * const ptrREx = (beads.size() != 0) ? almRealExcludedVolSum.data() : nullptr;
-    float * const ptrIEx = (beads.size() != 0) ? almImagExcludedVolSum.data() : nullptr;
-
-    unsigned int totalBeads = beads.size();
-    unsigned int lmax_plus_1_totalBeads = lmax_plus_1*totalBeads;
-    unsigned int long ylm_index, base_index;
-
-    auto pSBJ = sbj_x.getpSphericalBessels();
-
-    auto pReal = she_x.getpDataYLMReal();
-    auto pImag = she_x.getpDataYLMImag();
-
-//    if (recalculate){
-//        sbj_x.recalculate(totalqvalues, qvalues, &bead_rvalues);
-//    } else {
-//        // SHE depend on atomic coordinates (r, theta, phi)
-//        this->createSphericalHarmonicsEx();
-//
-//        // SBJ depends on qvalues and r
-//        this->createSphericalBesselsEx(totalqvalues, qvalues);
-//    }
-
-    float inv = 1.0f/(4*M_PI);
-    float diff = 0.6366/1.75;
-    float factor = 29.9f*(1 - diff*diff*diff);
-
-    for(auto & qvalue : qvalues){
-
-        float qval2 = qvalue*qvalue;
-        float cf = 0.334f*factor * std::expf(-std::cbrt(factor*factor)*inv*qval2);
-
-        waterASF = functions_WETSAXS::asf(99, qvalue) - cf;
-
-        // populate qr values
-        unsigned int ll_index = (lmax+1) * (lmax+1) * q_index;// + l*l + l + m;
-
-        for(int l=0; l<=lmax; l++){
-
-            bessel_index = lmax_plus_1_totalBeads*q_index + totalBeads*l;
-            base_index = (l*l)*totalBeads; // always positive
-
-            // calculate spherical bessels for given q, l over all atoms
-            // populateSphBesselsArray(l, qr, bessel_at_ql);
-            /*
-             * for m = 0
-             */
-            // for given (l,m) calculate Spherical Harmonic
-            // excluded volume term based on atomic coordinates
-            partialSumREx = 0.0f;
-            partialSumIEx = 0.0f;
-
-            ylm_index = base_index + l * totalBeads; // for m = 0
-
-            for (unsigned int n = 0; n < totalBeads; n++) { // over all atoms
-                pBessel = &pSBJ[bessel_index + n];
-                bessel_product_Ex = *pBessel; // for estimating excluded volume using water ASF
-
-                // real term
-                partialSumREx += bessel_product_Ex * pReal[ylm_index];  // excluded volume, real
-
-                //imaginary term
-                partialSumIEx += bessel_product_Ex * pImag[ylm_index]; // excluded volume, imaginary
-
-                ++ylm_index;
-            }
-
-            int partials_index = ll_index + l*l + l;
-
-            // excluded volume scattering for m=0
-            ptrREx[partials_index] = waterASF * partialSumREx; // uses volume fraction with assigned waters
-            ptrIEx[partials_index] = waterASF * partialSumIEx; // final should be negative of the amplitude (Babinet's)
-
-            // biggest time saving will be here, need to exploit the symmetry of spherical hamormonics (for m = -m)
-            for(int m=1; m<=l; m++) {
-                // for given (l,m) calculate Spherical Harmonic
-                // excluded volume term based on atomic coordinates
-                partialSumREx = 0.0f;
-                partialSumIEx = 0.0f;
-
-                ylm_index = base_index + (l + m) * totalBeads; //incorrect
-
-                // for each (l,m) calculate partial sum at given q value
-                for (unsigned int n = 0; n < totalBeads; n++) { // over all atoms
-
-                    pBessel = &pSBJ[bessel_index + n];
-                    bessel_product_Ex = *pBessel; // for estimating excluded volume using water ASF
-
-                    // real term
-                    pYLM = &pReal[ylm_index];
-                    partialSumREx += bessel_product_Ex * *pYLM;  // excluded volume, real
-
-                    //imaginary term
-                    pYLM = &pImag[ylm_index];
-                    partialSumIEx += bessel_product_Ex * *pYLM; // excluded volume, imaginary
-
-                    ++ylm_index;
-                }
-
-                // excluded volume
-                partialSumREx *= waterASF;
-                partialSumIEx *= waterASF;
-
-                int update_index = partials_index + m;
-                ptrREx[update_index] = partialSumREx; // uses volume fraction with assigned waters
-                ptrIEx[update_index] = partialSumIEx; // final should be negative of the amplitude (Babinet's)
-
-                // update negative m values
-                update_index = partials_index - m;
-
-                if (m & 1) {// if m is odd, flip sign of the real part
-                    // std::cout << count << " ( " << (partials_index -m) <<  " ) "  << ptrRAlm[partials_index -m] << " " << (-1*partialSumRAp) << std::endl;
-                    ptrREx[update_index] = -partialSumREx; // uses volume fraction with assigned waters
-                    ptrIEx[update_index] = partialSumIEx;  // final should be negative of the amplitude (Babinet's)
-
-                } else { // if m is even, flip sign of the Imaginary part
-                    // std::cout << count << " ( " << (partials_index -m) <<  " ) "  << ptrIAlm[partials_index -m] << " " << (-1*partialSumIAp) << std::endl;
-                    ptrREx[update_index] = partialSumREx;  // uses volume fraction with assigned waters
-                    ptrIEx[update_index] = -partialSumIEx; // final should be negative of the amplitude (Babinet's)
-                }
-            }
-        }
-        ++q_index;
-    }
-}
-
 /*
- * Model includes hydrogens (using unified form factor) but ignores hydration waters
- * average electron density of a protein should be around 0.4 electrons per cubic Angstrom
- *
+ * Forward-scattering amplitudes (electrons) of the particle and of its excluded volume.
+ *   particle        : sum of f_k(0) over the particle's atoms (unified atoms include H)
+ *   excluded volume : 0.334 * sum of V_k  (= A_x at q = 0)
+ * matchPoint = their ratio, i.e. mean particle density / bulk water density (proteins ~1.28).
+ * It is reported for information. With A_x in electrons, c_x is the buffer density relative to
+ * 0.334 e/A^3 directly and must NOT be multiplied by matchPoint in Fit.
+ * Hydration waters are not included here.
  */
 void AtomisticModel::setMatchPointScale(int * pAtomicNumbers){
 
-    forwardScatteringParticle = 0.0f;
-    //float * gaussian_radii = pdbModel.getAtomicGaussianRadii();
-    auto totalParticleAtoms = pdbModel.getTotalCoordinates();
-    float diff;
+    const unsigned int totalParticleAtoms = pdbModel.getTotalCoordinates();
+    const float * pVol = pdbModel.getAtomicVolumeVec();
 
-    // this should include hydrogens since using the unified form factors
-    for(unsigned int n=0; n < totalParticleAtoms; n++){ // over all atoms
-        diff = functions_WETSAXS::asf_at_q_zero(pAtomicNumbers[n]);
-        forwardScatteringParticle += diff*diff;
+    double sumF = 0.0, sumV = 0.0;
+    for(unsigned int n=0; n < totalParticleAtoms; n++){
+        sumF += functions_WETSAXS::asf_at_q_zero(pAtomicNumbers[n]);
+        sumV += pVol[n];
     }
 
-    for(unsigned int n=0; n < totalParticleAtoms; n++){ // over all atoms
-        unsigned int next_j = n+1;
-        float sumIt = 0;
-        for(unsigned int j=next_j; j < totalParticleAtoms; j++){ // over all atoms
-            sumIt += functions_WETSAXS::asf_at_q_zero(pAtomicNumbers[j]);
-        }
-        forwardScatteringParticle += 2*functions_WETSAXS::asf_at_q_zero(pAtomicNumbers[n])*sumIt;
-    }
+    forwardScatteringParticle = (float)sumF;            // amplitude, electrons
+    forwardScatteringExVolume = (float)(0.334*sumV);     // amplitude, electrons
 
-
-    /*
-     * calculate forward scattering of excluded volume
-     *
-     */
-    // water_asf at zero will be 10 electrons
-    const float water_asf = functions_WETSAXS::asf_at_q_zero(99);
-
-    // add the waters from the hydration.
-    auto totalHydratingWaters = totalAtoms - totalParticleAtoms;
-    forwardScatteringParticle += totalHydratingWaters*water_asf*water_asf;
-
-    // const float pw_vol = 29.9*0.334; // 10 e_n
-    // float factor;
-    // for(unsigned int i=0; i<totalParticleAtoms; i++){ // should be adjusted to include the waters that form the hydration
-    //     diff = gaussian_radii[i]/1.75; // 1.75 is gaussian sphere radius of water
-    //
-    //     factor = pw_vol*(1-diff*diff*diff);
-    //     diff = water_asf;// - factor; // if radius is same as water, no correction
-    //     forwardScatteringExVolume += diff*diff; // normalized to volume of water, looking at fractions of water volume
-    // }
-    //
-    // for(unsigned int n=0; n < totalParticleAtoms; n++){ // over all atoms
-    //     unsigned int next_j = n+1;
-    //     diff = gaussian_radii[n]/1.75;
-    //     factor = pw_vol*(1-diff*diff*diff);
-    //     diff = (water_asf - factor);
-    //     diff = water_asf;
-    //     float sumIt = 0;
-    //
-    //     for(unsigned int j=next_j; j < totalParticleAtoms; j++){ // over all atoms
-    //         float vdiff = gaussian_radii[j]/1.75;
-    //         factor = pw_vol*(1-vdiff*vdiff*vdiff);
-    //         sumIt += (water_asf - factor);
-    //     }
-    //     forwardScatteringExVolume += 2*diff*sumIt;
-    // }
-
-forwardScatteringExVolume = totalAtoms*totalAtoms*water_asf*water_asf;
-    // forwardScatteringExVolume = 0.0f;
-    // for (auto & weight : neighbor_weights) {
-    //     forwardScatteringExVolume += weight;
-    // }
-    // forwardScatteringExVolume *= 2;
-    // forwardScatteringExVolume += totalAtoms;
-    // forwardScatteringExVolume *= water_asf*water_asf;
-
-    //forwardScatteringExVolume += 377*377*pw_vol*pw_vol;
-    //forwardScatteringExVolume = forwardScatteringH2Os*0.334*0.334 + 1067*1067*pw_vol*pw_vol;
-    SASTOOLS_UTILS_H::logger("Forward Scattering Particle", formatNumber(forwardScatteringParticle, 1));
-    SASTOOLS_UTILS_H::logger("Forward Scattering ExVol", formatNumber(forwardScatteringExVolume, 1));
-
-    forwardScatteringParticle = std::sqrtf(forwardScatteringParticle);
-    forwardScatteringExVolume = std::sqrtf(forwardScatteringExVolume);
-
-    if (totalAtoms < 1 || forwardScatteringExVolume == 0)
+    if (totalParticleAtoms < 1 || forwardScatteringExVolume == 0)
         throw std::overflow_error("Divide by zero exception");
 
-    SASTOOLS_UTILS_H::logger("density (en-/Angstrom^3)", formatNumber(forwardScatteringParticle/pdbModel.getVolume(), 3));
-    //SASTOOLS_UTILS_H::logger("Total H2Os in Ex Volume", formatNumber(totalH2Os, 0));
+    SASTOOLS_UTILS_H::logger("Particle electrons", formatNumber(forwardScatteringParticle, 1));
+    SASTOOLS_UTILS_H::logger("Excluded volume electrons", formatNumber(forwardScatteringExVolume, 1));
+    SASTOOLS_UTILS_H::logger("density (en-/Angstrom^3)", formatNumber(forwardScatteringParticle/(float)sumV, 3));
 
-    // proteins have a match point of 0.42 e_n per Angstrom3
-    // nucleics have a match point of 0.55 e_n per Angstrom3
     matchPoint = forwardScatteringParticle/forwardScatteringExVolume;
-
 }
 
 
@@ -700,12 +354,6 @@ void AtomisticModel::createSphericalHarmonics(unsigned int lmax) {
 }
 
 
-void AtomisticModel::createSphericalHarmonicsEx() {
-
-    she_x = SphericalHarmonics(lmax, beads.size());
-    she_x.populateSHETable(bead_thetas.data(), bead_phis.data());
-
-}
 
 /*
  * must be run after SphericalHarmonics
@@ -713,15 +361,6 @@ void AtomisticModel::createSphericalHarmonicsEx() {
 void AtomisticModel::createSphericalBessels(unsigned int totalqvalues, std::vector < float > & qvalues) {
 
     sbj = SphericalBessels(lmax, totalqvalues, totalAtoms, qvalues, &rvalues);
-}
-
-
-/*
- * must be run after SphericalHarmonics
- */
-void AtomisticModel::createSphericalBesselsEx(unsigned int totalqvalues, std::vector < float > & qvalues) {
-
-    sbj_x = SphericalBessels(lmax, totalqvalues, beads.size(), qvalues, &bead_rvalues);
 }
 
 
@@ -829,15 +468,14 @@ void AtomisticModel::addWatersToAtomicModel(Waters &waterModel ) {
     auto wphiValues = waterModel.getPhiValues();
     auto wthetaValues = waterModel.getThetaValues();
 
-    unsigned int startHere = totalAtoms;
-
     if ( totalWaters < 1 ) {
         throw std::invalid_argument( "Water model not initialized" );
     }
 
-    // resize populated spherical coordinates of PDB model to add the hydration
-
-    totalAtoms += totalWaters;
+    // waters are appended after the particle's atoms; resetting (not accumulating) makes repeated
+    // calls safe, e.g. once per round in Fit::chiFreeSearch
+    unsigned int startHere = pdbModel.getTotalCoordinates();
+    totalAtoms = startHere + totalWaters;
     rvalues.resize(totalAtoms);
     thetas.resize(totalAtoms);
     phis.resize(totalAtoms);
@@ -852,102 +490,9 @@ void AtomisticModel::addWatersToAtomicModel(Waters &waterModel ) {
     // atoms that make up the particle model end at => pdbModel.getTotalCoordinates()
     // converting spherical coordinates to harmonics is simple call to SHE and Bessel functions
 
-    // could add the waters that form the hydration to the coordinate model?
-    totalDistances = totalAtoms*(totalAtoms-1)/2;
-    ex_volume_weights.resize(totalDistances, 0);
 
-    this->populateExVolumeWeights(waterModel);
 }
 
-/*
- * Use this function to determine weights between atoms based on distances for excluded volume calculation
- *
- */
-void AtomisticModel::populateExVolumeWeights(Waters &waterModel){
-
-    auto totalWaters = waterModel.getTotalWaters();
-    auto totalPDBAtoms = pdbModel.getTotalCoordinates();
-
-    const float * pX = pdbModel.getCenteredXVec();
-    const float * pY = pdbModel.getCenteredYVec();
-    const float * pZ = pdbModel.getCenteredZVec();
-
-    //float inv_delta = (float)lmax/ pdbModel.getDmax();
-    float dis;
-    float a_1 = 2.4 ;
-    float r_1 = 2.8 ;
-    float s_1 = 0.5/(0.28*0.28);
-    float a_2 = 0.5 ;
-    float r_2 = 4.5 ;
-    float s_2 = 0.5/(0.55*0.55);
-    float a_3 = 0.2 ;
-    float r_3 = 7.1 ;
-    float s_3 = 0.5/(0.9*0.9) ;
-    float k=8;
-    float normalization = 1.0/17.5;
-
-    unsigned int counter = 0;
-   // unsigned int num;
-    float minLimit = 2.49*2.49;
-    float maxLimit = 10.1*10.1;
-
-    // using particle to particle atoms
-    // then water to particle atoms
-    // finally water to water atoms
-    for(unsigned int i=0; i<totalPDBAtoms; i++){
-        vector3 vec1(pX[i], pY[i], pZ[i]);
-
-        for(unsigned int j=(i+1); j<totalPDBAtoms; j++){
-            dis = (vector3(pX[j], pY[j], pZ[j])-vec1).sqlength();
-            if (dis > minLimit && dis < maxLimit) {
-                dis = sqrt(dis);
-                // P(r) distribution of water => r^2*( g(r)-1 )
-                // maximum value at P(2.8) is 1, normalized to peak value
-                ex_volume_weights[counter] = normalization*dis*dis*((1 + a_1*expf(-std::powf(dis-r_1,2)*s_1) + a_2*expf(-std::powf(dis-r_2,2)*s_2) + a_3*expf(-std::powf(dis-r_3,2)*s_3))*(1-expf(-k*std::powf(dis-2.3,2))) - 1);
-            }
-            counter++;
-        }
-    }
-
-    // now do the water-to-particle model cross-terms
-    auto waters = waterModel.getHydration();
-    Coords * pC2;
-
-    for(unsigned int i=0; i < totalPDBAtoms; i++){
-
-        vector3 vec1(pX[i], pY[i], pZ[i]);
-
-        for(unsigned int j=0; j<totalWaters; j++){
-
-            pC2 = &waters[j];
-            dis = (vector3(pC2->x, pC2->y, pC2->z)-vec1).sqlength();
-
-            if (dis > minLimit && dis < maxLimit) {
-                dis = sqrt(dis);
-                ex_volume_weights[counter] = normalization*dis*dis*((1 + a_1*expf(-std::powf(dis-r_1,2)*s_1) + a_2*expf(-std::powf(dis-r_2,2)*s_2) + a_3*expf(-std::powf(dis-r_3,2)*s_3))*(1-expf(-k*std::powf(dis-2.3,2))) - 1);
-            }
-            counter++;
-        }
-    }
-
-
-    for(unsigned int i=0; i < totalWaters; i++){
-
-        const Coords *pC = &waters[i];
-        vector3 vec1(pC->x, pC->y, pC->z);
-
-        for(unsigned int j=i+1; j<totalWaters; j++){
-            pC2 = &waters[j];
-            dis = (vector3(pC2->x, pC2->y, pC2->z)-vec1).sqlength();
-
-            if (dis > minLimit && dis < maxLimit) {
-                dis = sqrt(dis);
-                ex_volume_weights[counter] = normalization*dis*dis*((1 + a_1*expf(-std::powf(dis-r_1,2)*s_1) + a_2*expf(-std::powf(dis-r_2,2)*s_2) + a_3*expf(-std::powf(dis-r_3,2)*s_3))*(1-expf(-k*std::powf(dis-2.3,2))) - 1);
-            }
-            counter++;
-        }
-    }
-}
 
 
 /*
@@ -960,99 +505,8 @@ void AtomisticModel::populateSphBesselsArray(int l, std::vector<float> & qr, flo
     for (int i=0 ; i < totalAtoms; i++) {
         bessel_alq[ i ] =  boost::math::sph_bessel(l, pQR[i]);
     }
-
 }
 
-/*
- * cutoff is the squared distance limit
- * calculate unique index value if neighbors using formula
- * row*N - row*(row+1)/2 -row + col -1
- * row is always less than col
- * nearestNeighbors is a set so look up should be fast
- *
- * correlation length of water at ambient is around 1.3 Angstroms (Hura and Huang 2009 and 2010)
- *
- */
-void AtomisticModel::createNeighborhoods(float cutoff){
-
-    const float * pRv = rvalues.data();//pdbModel.getCenteredXVec();
-    const float * pThetav = thetas.data();//pdbModel.getCenteredYVec();
-    const float * pPhiv = phis.data();//pdbModel.getCenteredZVec();
-
-    neighbors_offset.resize(totalAtoms+1);
-    neighbors_offset[0] = 0;
-
-    paired_r_values.clear();
-
-    float minLimit = 2.57*2.57;
-    float r1, r2, r1_2, r2_2, r12, theta1, theta2, diff, cosphi, phi1;
-
-    // calculate spherical coordinates of atoms - must be centered
-    unsigned int totalweights = 0;
-    for(unsigned int row=0; row < totalAtoms; row++){
-
-        r1 = pRv[row];
-        theta1 = pThetav[row];
-        phi1 = pPhiv[row];
-
-        r1_2 = r1*r1;
-        unsigned int totalNeighbors = 0;
-        unsigned int col = 0;
-        float weightsum = 0;
-        for(; col < row; col++){
-
-            r2 = pRv[col];
-            r2_2 = r1_2 + r2*r2;
-
-            r12 = 2*r1*r2;
-
-            if (r2_2 - r12 < cutoff) { // calculate difference in spherical coordinates
-                theta2 = pThetav[col];
-                cosphi = cos(phi1 - pPhiv[col]);
-                diff = r2_2 - r12*0.5*(cos(theta1 - theta2)*(1 + cosphi) + cos(theta1 + theta2)*(1 - cosphi));
-
-                if (diff > minLimit && diff < cutoff) {
-                    neighbor_indices.push_back(col);   // all neighbors concatenated
-                    paired_r_values.push_back(sqrt(diff));
-                    neighbor_weights.push_back(calculateWaterWeight(paired_r_values.back()));
-                    // if (neighbor_weights.back() < 0) {
-                    //     std::cout << "neighbor weight " << sqrtf(diff) << " " << neighbor_weights.back() << std::endl;
-                    //     exit(0);
-                    // }
-                    weightsum += neighbor_weights.back();
-                    totalNeighbors++;
-                    totalweights++;
-                }
-            }
-        }
-        col++;
-
-        for(; col < totalAtoms; col++){
-
-            r2 = pRv[col];
-            r2_2 = r1_2 + r2*r2;
-
-            r12 = 2*r1*r2;
-
-            if (r2_2 - r12 < cutoff) { // calculate difference in spherical coordinates
-                theta2 = pThetav[col];
-                cosphi = cos(phi1 - pPhiv[col]);
-                diff = r2_2 - r12*0.5*(cos(theta1 - theta2)*(1 + cosphi) + cos(theta1 + theta2)*(1 - cosphi));
-
-                if (diff > minLimit && diff < cutoff) {
-                    neighbor_indices.push_back(col);   // all neighbors concatenated
-                    paired_r_values.push_back(sqrt(diff));
-                    neighbor_weights.push_back(calculateWaterWeight(paired_r_values.back()));
-                    weightsum += neighbor_weights.back();
-                    totalNeighbors++;
-                    totalweights++;
-                }
-            }
-        }
-        neighbors_offset[row+1] = totalNeighbors + neighbors_offset[row]; // record total neighbors per atom
-        //std::cout << "Total neighbors: " << row << " " << totalNeighbors << " " << weightsum << std::endl;
-    }
-}
 
 void AtomisticModel::createHCPGridModel(float bin_width){
 
@@ -1328,33 +782,33 @@ void AtomisticModel::createHCPGridModel(float bin_width){
 /*
  * Use SIMDe to performed vector sum
  */
-float AtomisticModel::addUp(const unsigned int total_width, float * vector_to_sum) {
-
-    unsigned int window = 8; // window is 8 for _m128 and 16 for _m256
-
-    const unsigned int alignedN = total_width - total_width % window;
-    simde__m128 mmSum1, mmSum2, v0, v1;
-
-    auto * sum_sse = (float *)_aligned_malloc(sizeof(float)*4, 16);
-
-    for (int i = 0; i < alignedN; i+=window) {
-        v0 = simde_mm_load_ps(&vector_to_sum[i]);
-        mmSum1 = simde_mm_add_ps(mmSum1, v0);
-
-        v1 = simde_mm_load_ps(&vector_to_sum[i+4]);
-        mmSum1 = simde_mm_add_ps(mmSum1, v1);
-    }
-
-    simde_mm_store_ps(sum_sse, mmSum1);
-
-    float sum = sum_sse[0] + sum_sse[1] + sum_sse[2] + sum_sse[3];
-
-    for (int i = alignedN; i < total_width; ++i) {
-        sum += vector_to_sum[i];
-    }
-
-    return sum;
-}
+// float AtomisticModel::addUp(const unsigned int total_width, float * vector_to_sum) {
+//
+//     unsigned int window = 8; // window is 8 for _m128 and 16 for _m256
+//
+//     const unsigned int alignedN = total_width - total_width % window;
+//     simde__m128 mmSum1, mmSum2, v0, v1;
+//
+//     auto * sum_sse = (float *)_aligned_malloc(sizeof(float)*4, 16);
+//
+//     for (int i = 0; i < alignedN; i+=window) {
+//         v0 = simde_mm_load_ps(&vector_to_sum[i]);
+//         mmSum1 = simde_mm_add_ps(mmSum1, v0);
+//
+//         v1 = simde_mm_load_ps(&vector_to_sum[i+4]);
+//         mmSum1 = simde_mm_add_ps(mmSum1, v1);
+//     }
+//
+//     simde_mm_store_ps(sum_sse, mmSum1);
+//
+//     float sum = sum_sse[0] + sum_sse[1] + sum_sse[2] + sum_sse[3];
+//
+//     for (int i = alignedN; i < total_width; ++i) {
+//         sum += vector_to_sum[i];
+//     }
+//
+//     return sum;
+// }
 
 /*
  * this can be distributed, treating each q-value separately

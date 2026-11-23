@@ -57,9 +57,7 @@ add_subdirectory(src/fsrc)
 include_directories(src/fsrc)
 target_include_directories(nnls_lib PUBLIC src/fsrc)
 
-add_executable(wetSAXS main.cpp
-        tests/Mask.cpp
-        tests/FCCModel.cpp)
+add_executable(wetSAXS main.cpp)
 
 if(OpenMP_CXX_FOUND)
         target_link_libraries(wetSAXS

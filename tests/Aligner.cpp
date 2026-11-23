@@ -144,8 +144,6 @@ TEST_F(AlignerTests, svdAlignmentTest) {
 
     align.getRotationMatrix(a_matrix, i_m, rotation);
 
-    std::cout << rotation << std::endl;
-
     for(unsigned int j=0; j<5; j++){
 
         float * px = &q_tar(0,j);

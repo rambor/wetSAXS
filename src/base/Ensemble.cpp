@@ -46,7 +46,7 @@ Ensemble::Ensemble(std::vector<std::string> file_names, std::string directory) {
 
 
     // check if directory exists and is writeable
-    if (!boost::filesystem::exists(directory)){
+    if (!std::filesystem::exists(directory)){
         throw std::invalid_argument("** ERROR FILE => DIRECTORY NOT FOUND : " + directory);
     } else {
         this->directory = directory;

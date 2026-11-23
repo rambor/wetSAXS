@@ -1945,7 +1945,11 @@ void Waters::extractWatersFromAtomisticModel(AtomisticModel &model) {
 }
 
 float Waters::getForwardScatteringOfHydrationModel(){
-    return totalwaters*functions_WETSAXS::asf_at_q_zero(99);
+    double sumOcc = 0.0;
+    for(unsigned int n=0; n < totalwaters; n++){
+        sumOcc += hydration[n].occ;
+    }
+    return (float)sumOcc*functions_WETSAXS::asf_at_q_zero(99);
 }
 
 
@@ -2505,7 +2509,7 @@ void Waters::createSphericalCoordinateOfHydration() {
         rval = sqrtf(xval*xval + yval*yval +zval*zval);
 
         rvalues[n] = rval;
-        thetas[n] = acosf(zval/rval);
+        thetas[n] = (rval > 0.0f) ? acosf(zval/rval) : 0.0f; // guard: acos(0/0) is NaN
         phis[n] = (xval == 0 || xval == 0.0f) ? 0.0f : atan2f(yval, xval); // need to check if this is a good way to test for 0
     }
 
@@ -2515,12 +2519,28 @@ void Waters::createSphericalCoordinateOfHydration() {
 }
 
 
+/*
+ * Partial amplitudes of the hydration sites, two sets sharing one geometric sum
+ *
+ *   S_lm(q) = sum_n occ_n * j_l(q r_n) * Y_lm(theta_n, phi_n)
+ *
+ *   A_w   = f_w(q)  * S_lm   bound water: real molecular form factor of water (ASF 99)
+ *   A_w0  = g_w(q)  * S_lm   bulk water displaced by the same sites (buffer side):
+ *                            smooth Gaussian blob of 29.9 A^3, g_w(q) = 0.334*29.9*exp(-q^2 29.9^(2/3)/4pi)
+ *
+ * In Fit, A_xw0 = A_x (AtomisticModel excluded volume) + A_w0, and
+ *   I(q) = < | A_p + c_o A_w - c_x A_xw0 |^2 >
+ * At q = 0 both f_w and g_w are ~10 electrons, so the shell contrast is (c_o - c_x).
+ * Both sets are stored with a POSITIVE sign; Babinet's minus sign is applied in Fit.
+ *
+ * Index of A_lm(q_i): (lmax+1)^2 * q_index + l*l + l + m
+ */
 void Waters::calculatePartialAmplitudes(unsigned int lmax,
                                         unsigned int totalqvalues,
                                         std::vector < float > & qvalues,
                                         bool recalculate){
 
-    // if qvalues changed, need to recalulate spherical bessels
+    // if qvalues changed, need to recalculate spherical bessels
     if (recalculate){
         sbj.recalculate(totalqvalues, qvalues, &rvalues);
     } else {
@@ -2528,109 +2548,91 @@ void Waters::calculatePartialAmplitudes(unsigned int lmax,
         this->createSphericalBessels(totalqvalues, qvalues);
     }
 
-    // total partial amplitudes per q-value is (lmax+1)^2
-    almRealSum.resize((lmax+1)*(lmax+1)*totalqvalues);
-    almImagSum.resize((lmax+1)*(lmax+1)*totalqvalues);
-    float * const ptrR = (totalwaters != 0) ? almRealSum.data() : nullptr;
-    float * const ptrI = (totalwaters != 0) ? almImagSum.data() : nullptr;
+    const unsigned int partialsPerQ = (lmax+1)*(lmax+1);
+    almRealSum.resize(partialsPerQ*totalqvalues);
+    almImagSum.resize(partialsPerQ*totalqvalues);
+    almRealDisplacedSum.resize(partialsPerQ*totalqvalues);
+    almImagDisplacedSum.resize(partialsPerQ*totalqvalues);
 
-    auto pSBJ = sbj.getpSphericalBessels();
+    if (totalwaters == 0) {
+        std::fill(almRealSum.begin(), almRealSum.end(), 0.0f);
+        std::fill(almImagSum.begin(), almImagSum.end(), 0.0f);
+        std::fill(almRealDisplacedSum.begin(), almRealDisplacedSum.end(), 0.0f);
+        std::fill(almImagDisplacedSum.begin(), almImagDisplacedSum.end(), 0.0f);
+        return;
+    }
 
-    auto pRealYlm = she.getpDataYLMReal();
-    auto pImagYlm = she.getpDataYLMImag();
+    float * const ptrR  = almRealSum.data();
+    float * const ptrI  = almImagSum.data();
+    float * const ptrR0 = almRealDisplacedSum.data();
+    float * const ptrI0 = almImagDisplacedSum.data();
+
+    const float * pSBJ = sbj.getpSphericalBessels();
+    const float * pRealYlm = she.getpDataYLMReal();
+    const float * pImagYlm = she.getpDataYLMImag();
+
+    std::vector<float> occ(totalwaters);
+    for (unsigned int n = 0; n < totalwaters; n++){
+        occ[n] = hydration[n].occ;
+    }
+
+    const float rho0 = 0.334f, vWater = 29.9f;
+    const float waterWidth = std::cbrt(vWater*vWater)/(4.0f*(float)M_PI);
 
     std::clock_t startTime = std::clock();
-
-    unsigned int bessel_index, q_index=0, base_index;
-    unsigned int long ylm_index;
-    float bessel_product, asf_at_q, partialSumR, partialSumI;
-
-    // float occupancies [totalwaters];
-    // for (unsigned int i=0; i< totalwaters; i++){
-    //     occupancies[i] = 0.9;//0.22;//1.0;//hydration[i].occ;
-    // }
-
-    float * pR, *pI;
+    unsigned int q_index = 0;
 
     for(auto & qvalue : qvalues){
 
-        asf_at_q = functions_WETSAXS::asf(99, qvalue);
+        const float fw = functions_WETSAXS::asf(99, qvalue);                        // bound water
+        const float gw = rho0*vWater*std::exp(-qvalue*qvalue*waterWidth);         // displaced bulk water
 
-        int ll_index = (lmax+1)*(lmax+1)*q_index;// + l*l + l + m;
+        const unsigned int ll_index = partialsPerQ*q_index;
 
-        for(int l=0; l<=lmax; l++){
+        for(int l=0; l<=(int)lmax; l++){
 
-            bessel_index = (lmax+1)*totalwaters*q_index + totalwaters*l;
-            base_index = (l*l)*totalwaters;
+            const unsigned long bessel_index = (unsigned long)(lmax+1)*totalwaters*q_index + (unsigned long)totalwaters*l;
+            const unsigned long base_index = (unsigned long)(l*l)*totalwaters;
+            const unsigned int partials_index = ll_index + l*l + l;
 
-            /*
-             * for m = 0
-             */
-            // for given (l,m) calculate Spherical Harmonic
-            partialSumR = 0.0f;
-            partialSumI = 0.0f;
+            // m = 0 : imaginary part of Y_l0 is zero
+            {
+                double sumR = 0.0;
+                unsigned long ylm_index = base_index + (unsigned long)l*totalwaters;
 
-            ylm_index = base_index + l * totalwaters; // for m = 0
+                for (unsigned int n = 0; n < totalwaters; n++, ylm_index++) {
+                    sumR += occ[n]*pSBJ[bessel_index + n]*pRealYlm[ylm_index];
+                }
 
-            for (unsigned int n = 0; n < totalwaters; n++) { // over all atoms
-
-                bessel_product = pSBJ[bessel_index + n];// * occupancies[n];
-
-                // real term
-                partialSumR += bessel_product * pRealYlm[ylm_index];
-                //imaginary term
-                partialSumI += bessel_product * pImagYlm[ylm_index];
-
-                ++ylm_index;
+                ptrR[partials_index]  = fw*(float)sumR;  ptrI[partials_index]  = 0.0f;
+                ptrR0[partials_index] = gw*(float)sumR;  ptrI0[partials_index] = 0.0f;
             }
 
-            // update for m = 0
-            int partials_index = ll_index + l*l + l;
-
-            ptrR[partials_index] = asf_at_q * partialSumR;
-            ptrI[partials_index] = asf_at_q * partialSumI;
-
+            // m > 0, and m < 0 by symmetry of a real density: A_{l,-m} = (-1)^m conj(A_{l,m})
             for(int m=1; m<=l; m++){
-                // for given (l,m) calculate Spherical Harmonic
-                // she.calculateSHE(l,m,thetas.data(), phis.data());
 
-                // over all atoms
-                partialSumR = 0.0f;
-                partialSumI = 0.0f;
+                double sumR = 0.0, sumI = 0.0;
+                unsigned long ylm_index = base_index + (unsigned long)(l+m)*totalwaters;
 
-                ylm_index = base_index + (l+m) * totalwaters;
-
-                // for each (l,m) calculate partial sum at given q value
-                for(unsigned int n=0;n<totalwaters;n++){
-
-                    bessel_product = pSBJ[bessel_index + n];// * occupancies[n];
-
-                    // real term
-                    partialSumR += bessel_product * pRealYlm[ylm_index];
-                    //imaginary term
-                    partialSumI += bessel_product * pImagYlm[ylm_index];
-
-                    ++ylm_index;
+                for(unsigned int n=0; n<totalwaters; n++, ylm_index++){
+                    const float b = occ[n]*pSBJ[bessel_index + n];
+                    sumR += b*pRealYlm[ylm_index];
+                    sumI += b*pImagYlm[ylm_index];
                 }
 
-                int at_m = partials_index + m;
+                const float sR = (float)sumR, sI = (float)sumI;
+                unsigned int idx = partials_index + m;
+                ptrR[idx]  = fw*sR;  ptrI[idx]  = fw*sI;
+                ptrR0[idx] = gw*sR;  ptrI0[idx] = gw*sI;
 
-                pR = &ptrR[at_m];
-                pI = &ptrI[at_m];
-
-                *pR = asf_at_q * partialSumR;
-                *pI = asf_at_q * partialSumI;
-
-                at_m = partials_index - m;
-                // update negative m values
-                if (m & 1){
-                    ptrR[at_m] = -*pR;
-                    ptrI[at_m] = *pI;
-                } else {
-                    ptrR[at_m] = *pR;
-                    ptrI[at_m] = -*pI;
+                idx = partials_index - m;
+                if (m & 1){ // odd m: flip sign of the real part
+                    ptrR[idx]  = -fw*sR;  ptrI[idx]  = fw*sI;
+                    ptrR0[idx] = -gw*sR;  ptrI0[idx] = gw*sI;
+                } else {    // even m: flip sign of the imaginary part
+                    ptrR[idx]  = fw*sR;   ptrI[idx]  = -fw*sI;
+                    ptrR0[idx] = gw*sR;   ptrI0[idx] = -gw*sI;
                 }
-
             }
         }
 
@@ -2639,7 +2641,6 @@ void Waters::calculatePartialAmplitudes(unsigned int lmax,
 
     double runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
     logger("Total TIME (Waters)", formatNumber((float)runtime,8));
-
 }
 
 

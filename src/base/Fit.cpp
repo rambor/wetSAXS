@@ -235,6 +235,12 @@ void Fit::assemblePartials(AtomisticModel &model,
     const float * pAlmPR, * pAlmPI, * pXlmR, * pXlmI, * pWlmR, *pWlmI;
 
     unsigned int totalpartialsperq = (lmax+1)*(lmax+1);
+
+    // partialRows maps a working-set row to the row of the partials it was computed for
+    // (chiFreeSearch computes partials once for all data); empty means the rows coincide
+    if (!partialRows.empty() && partialRows.size() != totalInWorkingSet)
+        throw std::invalid_argument("Fit::assemblePartials: partialRows does not match the working set");
+
     // calculate squared norm terms
     for(unsigned int q = 0; q < totalInWorkingSet; q++) {
 
@@ -248,7 +254,8 @@ void Fit::assemblePartials(AtomisticModel &model,
         aXWR_term = 0.0;
         aXWI_term = 0.0;
 
-        unsigned int startAt = q*totalpartialsperq; // always positive
+        const unsigned int row = partialRows.empty() ? q : partialRows[q];
+        unsigned int startAt = row*totalpartialsperq; // always positive
         // for each l, m take the complex norm and sum
         for(unsigned int lm=0; lm< totalpartialsperq; lm++){ // sums the L and M's per q value
 
@@ -1433,27 +1440,21 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
         totalRounds+=1;
     }
 
+    // Partial amplitudes of each q are independent of the others, so compute them ONCE for every
+    // measured q. Each round then selects its working-set rows through partialRows.
+    iofqdata.setAllDataToWorkingSet();
+    std::vector<float> allQvalues = iofqdata.getWorkingSetQvalues();
+
+    SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes (all q, once)");
+    model.calculatePartialAmplitudes(lmax, allQvalues.size(), allQvalues);
+    waterModel.calculatePartialAmplitudes(lmax, allQvalues.size(), allQvalues);
+
     for (unsigned int rnd=0; rnd<totalRounds; rnd++){
 
         SASTOOLS_UTILS_H::logger("CHI-free round", formatNumber(rnd+1));
 
-        iofqdata.makeWorkingSet();
-
-        std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
-
-        model.addWatersToAtomicModel(waterModel);
-        model.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, (rnd > 1));
-
-     // waterModel.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, (rnd > 1));
-     // model.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues, (rnd > 1));
-
-
-        Mask mask = Mask();
-        mask.readInWaterModel(waterModel);
-        mask.createParticleMask(model);
-        mask.calculateMaskCrossTerm(qvalues.size(), qvalues, model);
-
-        // at this point make the amplitudes for weighting
+        iofqdata.makeWorkingSet();                   // sorted indices into the full data
+        partialRows = iofqdata.getSelectedIndices(); // working-set row -> partials row
 
         this->search(iofqdata, model, waterModel);
         results.emplace_back(Result(bestScore, bestScaleCoef, bestCx, bestOcc, bestDW, bestChi, i_best, iofqdata.getSelectedIndices()));
@@ -1488,7 +1489,7 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
 
     auto & res = results[middle];
     bestScore = res.score;
-    bestChi - res.getChi();
+    bestChi = res.getChi();
     bestDW = res.getDurbinWatson();
     bestCx = res.getCX(); // percent * contrast_match_point
     bestOcc = res.getCO();
@@ -1503,14 +1504,11 @@ void Fit::chiFreeSearch(unsigned int totalRounds, IofQData &iofqdata, AtomisticM
     // calculate over all input data using best fitting median parameters
     SASTOOLS_UTILS_H::logger("STATUS", "FINAL FIT TO ALL DATA");
     iofqdata.setAllDataToWorkingSet();
+    partialRows.clear(); // working set = all data, in the same order as the partials
     std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
 
-//    // recalculate Partials for the initial models
-    waterModel.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
-    model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
-//
+    // partials for all q already exist: no recalculation needed
     fitFixedCoAndCx(iofqdata, model, waterModel, bestOcc, bestCx);
-    bestCx/model.getMatchPoint();
     SASTOOLS_UTILS_H::logger("CHI-free Parameters", "All Data");
     printBestScores();
 

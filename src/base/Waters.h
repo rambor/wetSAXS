@@ -59,8 +59,10 @@ private:
     std::vector<float> thetas; // could be aligned memory
     std::vector<float> phis;
 
-    std::vector<float> almRealSum; // partial sums
+    std::vector<float> almRealSum; // partial sums, bound water A_w
     std::vector<float> almImagSum;
+    std::vector<float> almRealDisplacedSum; // partial sums, displaced bulk water at the sites A_w0
+    std::vector<float> almImagDisplacedSum;
 
     SphericalHarmonics she;
     SphericalBessels sbj;
@@ -131,6 +133,8 @@ public:
 
     const float * getModelPartialsReal() { return almRealSum.data(); } // partial sums
     const float * getModelPartialsImag() { return almImagSum.data();}
+    const float * getDisplacedPartialsReal() { return almRealDisplacedSum.data(); } // A_w0, buffer side
+    const float * getDisplacedPartialsImag() { return almImagDisplacedSum.data(); }
 
     [[nodiscard]] const std::map<std::string, std::unordered_map<std::string, Coords>> & getSideChains() const {
         return sideChains;

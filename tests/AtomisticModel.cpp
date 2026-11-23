@@ -70,6 +70,15 @@ float val = md.excluded_volume_scattering(2.1, 0.01);
     //EXPECT_EQ(5, md.getTotalUniqueAtoms()) << "Total Unique atoms should be " << bsaModel.getTotalUniqueAtoms();
 }
 
+TEST_F(AtomisticModelTests, excludedVolumeForwardScattering){
+    AtomisticModel md = AtomisticModel(fixture(bsa.pdb), false, false);
+
+    std::vector<float> qvalues = {0.0005f};
+    md.calculatePartialAmplitudes(2, qvalues.size(), qvalues);
+
+    // A_x at q -> 0 is 0.334 * sum V_k (about 26,960 e for BSA with the residue volumes)
+    EXPECT_NEAR(md.getMatchPoint(), 1.31, 0.02);
+}
 
 TEST_F(AtomisticModelTests, calculateMicelleInVacuo){
     float qmax = 0.67;
