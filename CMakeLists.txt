@@ -2,16 +2,20 @@ cmake_minimum_required(VERSION 3.21)
 project(wetSAXS)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS_Release "${CMAKE_CXX_FLAGS_RELEASE} -Wall -g1 -DNDEBUG -O3 ")
+set(CMAKE_CXX_FLAGS_Release "${CMAKE_CXX_FLAGS_RELEASE} -Wall -g1 -DNDEBUG -O3 -fopenmp -ffast-math")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -ffast-math -fopenmp")
-MESSAGE("** SYSTEM : ${CMAKE_SYSTEM_NAME}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -ffast-math -fopenmp")
 
+set(Boost_INCLUDE_DIR /Users/xos81802/libs/boost/include)
 SET (SASTOOLS_INCLUDE_DIRS $ENV{HOME}/usr/local/include)
 SET(USER_LOCAL_DIR $ENV{HOME}/usr/local)
 include_directories(${SASTOOLS_INCLUDE_DIRS})
 
 find_library(SASTools_LIB libSASTools.a PATHS ~/usr/local/lib ~/lib)
+
+MESSAGE("** SYSTEM : ${CMAKE_SYSTEM_NAME}")
+
+find_package(OpenMP)
 #
 # BOOST SECTION
 #
@@ -21,7 +25,8 @@ set(Boost_USE_STATIC_RUNTIME ON)
 
 # Specify the -DBOOST_LIBRARYDIR=/Users/xos81802/src_libs/boost/lib in shell
 # Boost root variable set as environment variable in CLION Preferences
-find_package(Boost)
+
+find_package(BOOST REQUIRED NO_MODULE)
 MESSAGE("** BOOST ROOT => ${BOOSTROOT}")
 MESSAGE("** BOOST ROOT => ${BOOST_ROOT}")
 MESSAGE("** BOOST INCLUDE DIRECTORY: ${Boost_INCLUDE_DIR}")
@@ -52,12 +57,22 @@ add_subdirectory(src/fsrc)
 include_directories(src/fsrc)
 target_include_directories(nnls_lib PUBLIC src/fsrc)
 
-add_executable(wetSAXS main.cpp)
+add_executable(wetSAXS main.cpp
+        tests/Mask.cpp
+        tests/FCCModel.cpp)
 
-target_link_libraries(wetSAXS
-        PUBLIC
-        ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
-        ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib
+if(OpenMP_CXX_FOUND)
+        target_link_libraries(wetSAXS
+                PUBLIC
+                OpenMP::OpenMP_CXX ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
+                ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib)
+else()
+        target_link_libraries(wetSAXS
+                PUBLIC
+                ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
+                ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib
         )
+endif()
+
 
 add_subdirectory(lib) # testing directory

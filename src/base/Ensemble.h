@@ -44,17 +44,24 @@ class Ensemble {
         unsigned int index;
         std::string name;
         std::vector<float> aPs;
-        std::vector<float> pAPWs;
-        std::vector<float> pACrossTerms;
-        std::vector<float> pExVols;
+        std::vector<float> aWs;
+        std::vector<float> aCs;
+        std::vector<float> aPW_cross_terms;
+        std::vector<float> aPX_cross_terms;
+        std::vector<float> aXW_cross_terms;
 
         Amplitudes(unsigned int index, std::string name) : index(index), name(name) {}
 
-        void addValues(std::vector<float> aps, std::vector<float> aPWs, std::vector<float> pACs, std::vector<float> crossterm){
-            aPs = std::move(aps);
-            pAPWs = std::move(aPWs);
-            pExVols = std::move(pACs);
-            pACrossTerms = std::move(crossterm);
+        void addValues(std::vector<float> aAp, std::vector<float> aAw, std::vector<float> aAc,
+            std::vector<float> aPW_cross_terms, std::vector<float> aPX_cross_terms, std::vector<float> aXW_cross_terms){
+
+            aPs = std::move(aAp);
+            aWs = std::move(aAw);
+            aCs = std::move(aAc);
+            this->aPW_cross_terms = std::move(aPW_cross_terms);
+            this->aPX_cross_terms = std::move(aPX_cross_terms);
+            this->aXW_cross_terms = std::move(aXW_cross_terms);
+
         }
     };
 
@@ -141,11 +148,14 @@ public:
 
     void search(unsigned int lmax, IofQData * file, bool forceRNA, bool keepWaters = false, int oversampling=5);
 
-    void assemblePartials(unsigned int lmax, AtomisticModel &model, Waters &waterModel, unsigned int totalInWorkingSet,
-                          std::vector<float> & aP,
-                          std::vector<float> & pPW,
-                          std::vector<float> & pCX,
-                          std::vector<float> & pCrossterm);
+    void assemblePartials(unsigned int lmax, AtomisticModel &model, Waters &waterModel,
+                           std::vector<float> & norm_Pamps,
+                           std::vector<float> & norm_Wamps,
+                           std::vector<float> & norm_Camps,
+                           std::vector<float> & aPW_cross_terms,
+                           std::vector<float> & aPX_cross_terms,
+                           std::vector<float> & aXW_cross_terms,
+                           unsigned int totalInWorkingSet);
 
     std::string getDirectory(){ return directory;}
 
@@ -199,13 +209,14 @@ public:
     }
 
 
-    float populateIntensitiesMatrix(unsigned int totalQ,
-                                              float *qvalues,
-                                              std::vector<Amplitudes> models,
+    void populateIntensitiesModel(unsigned int totalQ,
+                                              unsigned int lmax,
+                                              AtomisticModel & pdbmodel,
+                                              Waters & waterModel,
+                                              boost::numeric::ublas::matrix<float> & models,
                                               float cx,
-                                              float bfactor,
-                                              boost::numeric::ublas::matrix<float> & intensities);
-
+                                              float co,
+                                              unsigned int mdl_cnt);
     /*
     * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
     */
@@ -294,7 +305,7 @@ public:
      *
      * dmax cutoff
      */
-    void ce_search(IofQData & iofqdata, float cx, float bfactor, bool dmaxFilter){
+    void ce_search(IofQData & iofqdata, float cx, float co, bool dmaxFilter){
 
         iofqdata.makeWorkingSet(5); // meaningless number
         unsigned int totalInWorkingSet = iofqdata.getTotalInWorkingSet();
@@ -340,25 +351,7 @@ public:
                 waters.createSphericalCoordinateOfHydration();
                 waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
-                std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
-
-                // assemble the partials and
-                this->assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
-
-                // combine
-                for(unsigned int q=0; q<totalInWorkingSet; q++){
-                    float q_val = qvalues[q]; // get qvalue to calculate b-factor
-                    float exp_term = expf(-(q_val*q_val)*bfactor*inv16Pi2)*cx;
-                    // from assemblePartials in Ensemble
-                    //        pAP[q] = a_p_norm;
-                    //        pAc[q] = a_x_norm; // excluded volume
-                    //        pApw[q] = a_p_norm + a_w_norm + 2.0f*(aPWR_term + aPWI_term); // hydratedParticle term
-                    //        pAXW_cross_term[q] = -2.0f*(aXWR_term + aXWI_term + aPXR_term + aPXI_term); // invert phase
-                    models(q, mdl_cnt) = aPWs[q] + aCs[q]*exp_term*exp_term + exp_term*aXW_cross_term[q];
-                }
+                populateIntensitiesModel(totalInWorkingSet, lmax, model, waters, models, cx, co, mdl_cnt);
 
                 params.emplace_back(Param(filename, model.calculateRg(), model.getDmax()));
 
@@ -449,7 +442,7 @@ public:
      * Not to be used for ensemble selection
      *
      */
-    void combinatorial_search(IofQData & iofqdata, float cx, float bfactor){
+    void combinatorial_search(IofQData & iofqdata, float cx, float co){
 
         //iofqdata.makeWorkingSet(11); // meaningless number
         iofqdata.setAllDataToWorkingSet();
@@ -502,27 +495,8 @@ public:
                 waters.createSphericalCoordinateOfHydration();
                 waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
-                std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+                populateIntensitiesModel(totalInWorkingSet, lmax, model, waters, models, cx, co, mdl_cnt);
 
-                // assemble the partials and
-                this->assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
-
-                // combine and add noise
-                for(unsigned int q=0; q<totalInWorkingSet; q++){
-                    float q_val = qvalues[q]; // get qvalue to calculate b-factor
-                    float exp_term = expf(-(q_val*q_val)*bfactor*inv16Pi2)*cx;
-                    // from assemblePartials in Ensemble
-                    //        pAP[q] = a_p_norm;
-                    //        pAc[q] = a_x_norm; // excluded volume
-                    //        pApw[q] = a_p_norm + a_w_norm + 2.0f*(aPWR_term + aPWI_term); // hydratedParticle term
-                    //        pAXW_cross_term[q] = -2.0f*(aXWR_term + aXWI_term + aPXR_term + aPXI_term); // invert phase
-                    models(q, mdl_cnt) = aPWs[q] + aCs[q]*exp_term*exp_term + exp_term*aXW_cross_term[q];
-                }
-
-                params.emplace_back(Param(filename, model.calculateRg(), model.getDmax()));
                 selected_indices_of_model_iqs.push_back(mdl_cnt);
                 mdl_cnt++;
             } catch (std::string & fl){

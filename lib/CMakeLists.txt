@@ -38,6 +38,8 @@ addToIt(Ensemble)
 addToIt(Aligner)
 addToIt(SVD)
 addToIt(HCPGridModel)
+addToIt(Mask)
+addToIt(FCCModel)
 
 include_directories(../src/base)
 include_directories(../src/fsrc)
@@ -49,5 +51,20 @@ set(TEST_OBJ ${CMAKE_PROJECT_NAME}_test)
 
 add_executable(${TEST_OBJ} ${CPP_FILES})
 
-target_link_libraries(${TEST_OBJ} PRIVATE ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM} ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib gtest gtest_main)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(${TEST_OBJ}
+            PRIVATE
+            OpenMP::OpenMP_CXX ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
+            ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib gtest gtest_main)
+    MESSAGE("** FOUNDIT => OPENMP_CXX_FOUND")
+else()
+    target_link_libraries(${TEST_OBJ}
+            PRIVATE
+            ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
+            ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib gtest gtest_main
+    )
+endif()
+
+
+# target_link_libraries(${TEST_OBJ} PRIVATE ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM} ${SASTools_LIB} ${CMAKE_PROJECT_NAME}_lib nnls_lib gtest gtest_main)
 # target_link_libraries(${TEST_OBJ} gtest gtest_main)

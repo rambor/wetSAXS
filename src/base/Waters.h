@@ -24,7 +24,6 @@
 #ifndef WETSAXS_WATERS_H
 #define WETSAXS_WATERS_H
 
-
 #include <map>
 #include "SphericalHarmonics.h"
 #include "SphericalBessels.h"
@@ -33,6 +32,8 @@
 #include <sastools/vector3.h>
 #include <stdexcept>
 #include <random>
+
+class AtomisticModel;
 
 class Waters {
 private:
@@ -53,8 +54,11 @@ private:
     std::vector<Coords> hydration;
 
     std::vector<float> rvalues;
+
+private:
     std::vector<float> thetas; // could be aligned memory
     std::vector<float> phis;
+
     std::vector<float> almRealSum; // partial sums
     std::vector<float> almImagSum;
 
@@ -62,12 +66,10 @@ private:
     SphericalBessels sbj;
     unsigned int lmax;
 
-//    std::random_device rd;
-//    std::mt19937 gen(rd());
-    float convert = (float)(M_PI/180.0f);
+    float convert = (M_PI/180.0f);
     std::mt19937 gen;
-    std::uniform_int_distribution<int> randomIndex;//(0,360); // guaranteed unbiased
-    std::uniform_int_distribution<int> randomBeta;//(0,180); // guaranteed unbiased
+    std::uniform_int_distribution<> randomIndex;//(0,360); // guaranteed unbiased
+    std::uniform_int_distribution<> randomBeta;//(0,180); // guaranteed unbiased
 
     Coords * tempWaters;
 
@@ -99,11 +101,11 @@ public:
 
     int placeWaters(std::string residue, int resid, float delX, float delY, float delZ);
 
-    const std::map<std::string, std::vector<Coords>> & getWaters() const {
+    [[nodiscard]] const std::map<std::string, std::vector<Coords>> & getWaters() const {
         return waters;
     }
 
-    const std::unordered_map<std::string, Coords> & getSideChainByName(const std::string& name) const {
+    [[nodiscard]] const std::unordered_map<std::string, Coords> & getSideChainByName(const std::string& name) const {
         auto findIt = sideChains.find(name);
         return findIt->second;
 //        return (findIt != sideChains.end()) ? (findIt->second) : std::make_pair("", Coords(0,0,0,"",0));
@@ -120,6 +122,8 @@ public:
 
     void createSphericalBessels(unsigned int totalqvalues, std::vector<float> &qvalues);
 
+    std::string assignBackbone(std::string residue);
+
     void calculatePartialAmplitudes(unsigned int lmax,
                                     unsigned int totalqvalues,
                                     std::vector<float> &qvalues,
@@ -128,13 +132,24 @@ public:
     const float * getModelPartialsReal() { return almRealSum.data(); } // partial sums
     const float * getModelPartialsImag() { return almImagSum.data();}
 
-    const std::map<std::string, std::unordered_map<std::string, Coords>> & getSideChains() const {
+    [[nodiscard]] const std::map<std::string, std::unordered_map<std::string, Coords>> & getSideChains() const {
         return sideChains;
     }
 
     float getForwardScatteringOfHydrationModel();
 
-    unsigned int getTotalWaters(){ return totalwaters; }
+    [[nodiscard]] unsigned int getTotalWaters() const { return totalwaters; }
+
+    [[nodiscard]] const std::vector<float> & getRvalues() const {
+        return rvalues;
+    }
+    [[nodiscard]] const std::vector<float> & getPhiValues() const {
+        return phis;
+    }
+    [[nodiscard]] const std::vector<float> & getThetaValues() const {
+        return thetas;
+    }
+
 
     void translateAndWriteWatersToFile(std::string name, const vector3 *);
 

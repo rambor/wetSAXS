@@ -49,8 +49,10 @@ SBESJY::SBESJY(float x, int lmax) : qr(x), lmax(lmax) {
     const double ACCUR = 1e-14;
 
     double invqr = 1.0/qr;
-    double j_o = std::sin(qr)*invqr;
-    double j_1 = (j_o - std::cos(qr))*invqr;
+    double sin_qr = std::sin(qr);
+    double cos_qr = std::cos(qr);
+    double j_o = sin_qr*invqr;
+    double j_1 = (j_o - cos_qr)*invqr;
 
     if (lmax == 0){
         jarray[0] = j_o;
@@ -146,8 +148,6 @@ SBESJY::SBESJY(float x, int lmax) : qr(x), lmax(lmax) {
             throw std::invalid_argument("Invalid argument, LIMIT EXCEEDED " + std::to_string(qr) + " lmax " + std::to_string(lmax));
         }
 
-        double error = ACCUR * sqrt(double(nfp)); // error estimate
-
         jarray[lmax] = den;
         jparray[lmax] = cf1 * den;
 
@@ -162,17 +162,17 @@ SBESJY::SBESJY(float x, int lmax) : qr(x), lmax(lmax) {
             jparray[l-1] = sl * jarray[l-1] - *pValue;
         }
 
-
         den = jarray[0];
+
         // CALCULATE THE L=0 SPHERICAL BESSEL FUNCTIONS DIRECTLY
 
         double * pJArray = jarray.data();
-        *pJArray =  invqr * sin(qr);
+        *pJArray =  invqr * sin_qr;  //j_0
 
         double omega = *pJArray/den;
 
         double * pJPArray = jparray.data();
-        double y_o = -invqr * cos(qr);
+        double y_o = -invqr * cos_qr;
         *pJPArray = -y_o - invqr * *pJArray;
 
         for (int l=1; l<=lmax; l++){

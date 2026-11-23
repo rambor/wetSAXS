@@ -9,6 +9,7 @@
 #include "Aligner.h"
 
 namespace po = boost::program_options;
+
 namespace {
     const size_t ERROR_IN_COMMAND_LINE = 1;
     const size_t SUCCESS = 0;
@@ -27,9 +28,9 @@ void checkCX(float cx){
     }
 }
 
-void checkUpperB(float upperB){
-    if ((upperB < 0 || upperB > 500)){
-        throw "ERROR: Upper B-Factor can not be NEGATIVE or greater than 500:: " + std::to_string(upperB);
+void checkCORange(float colow, float cohi){
+    if ((colow < 0 || colow > cohi)) {
+        throw "ERROR: lower C_o (colow) can not be NEGATIVE or greater than cohi :: " + std::to_string(colow) + " < " + std::to_string(cohi);
     }
 }
 
@@ -38,8 +39,6 @@ bool comp(std::string a, std::string b) {
 
     // first parameter should be greater than
     // second one (for decreasing order)
-
-
     return a > b;
 }
 
@@ -49,7 +48,7 @@ int main(int argc, const char *const *argv) {
     IofQData iofqdata;
 
     std::cout << "********************                                      *********************\n" << std::endl;
-    printf("                               wetSAXS version 1.0 2022 \n\n");
+    printf("                               wetSAXS version 1.0 2025 \n\n");
     printf("                           Authors: RP Rambo and FA Reyes\n\n");
     printf("                         Diamond Light Source Ltd, Didcot UK \n");
     printf("                      Lawrence Berkeley National Laboratory, USA \n\n");
@@ -59,9 +58,8 @@ int main(int argc, const char *const *argv) {
     std::cout << "    ADE and GUA are ambiguous and can specify either DNA or RNA           " << std::endl;
     std::cout << "********************                                      *********************" << std::endl;
 
-    float cxlow = 0.8, cxhi = 1.5, dmax=0.0f, qmin = 0.001, qmax = 0.41;
-
-    float bfactor = 0.98, cx = 1.108, upperB=101;
+    float cxlow = 0.01, cxhi = 0.9, dmax=0.0f, qmin = 0.001, qmax = 0.41;
+    float cx = 1.108, colow = 0.3, cohi = 1.21, co = 0.33;
 
     bool convertToAngstrom = false, forceRNA = false, keepWaters = false, noChiFree = false, singleFit = false,
     writeWaters = false, invacuo=false, mixture=false, ensemble=false, background=false, dmaxFilter = false,
@@ -74,19 +72,22 @@ int main(int argc, const char *const *argv) {
     std::string datFile, atomFile, listOfFiles;
     std::vector<std::string> filenames;
 
-    boost::program_options::options_description generic("\n Usage: wetSAXS myPDBFile.pdb");
+    std::string descText = "\n Usage: wetSAXS myPDBFile.pdb";
+    boost::program_options::options_description generic(descText);
 
     // if no dat file present, simulate using values specified by cw and cx
     generic.add_options()
             ("help,h", "help message")
             ("dat,i", po::value<std::string>(&datFile))
             ("toNM", po::bool_switch(&convertToAngstrom), "Reduce bead radius defining the lattice")
-            ("bfactor,b", po::value<float>(&bfactor), "Use to specify fixed B-factor for simulation or fitting (default: 0.98)")
             ("contrast,x", po::value<float>(&cx), "Excluded volume contrast adjustment (default: 1.108)")
+            ("occupancy,o", po::value<float>(&co), "Occupancy adjustment (default: 0.33)")
             (",g", po::bool_switch(&background), "Include constant background in fit (default: false)")
             ("cxlo", po::value<float>(&cxlow),"lower bound for excluded volume adjustment")
             ("cxhi", po::value<float>(&cxhi),"upper bound for excluded volume adjustment")
-            ("upperB", po::value<float>(&upperB),"upper bound for B-factor during search")
+            ("colo", po::value<float>(&colow),"lower bound for occupancy adjustment")
+            ("cohi", po::value<float>(&cohi),"upper bound for occupancy adjustment")
+
             ("divisions,v", po::value<int>(&divisions),"number of divisions between lower and upper bounds for searching (default: 101)")
 
             ("qmin", po::value<float>(&qmin),"qmin")
@@ -108,11 +109,7 @@ int main(int argc, const char *const *argv) {
 
 //    po::positional_options_description positionalOptions;
 //    positionalOptions.add("pdb-file", 1);
-
-    boost::program_options::options_description hidden("Hidden options");
-//    hidden.add_options()
-//            (FILES_KEY.c_str(), "list of PDB files");
-
+    po::options_description hidden("Hidden options");
     hidden.add_options()
             (FILES_KEY.c_str(), po::value(&filenames)->required(), "list of PDB files");
 
@@ -145,43 +142,338 @@ int main(int argc, const char *const *argv) {
 
         po::store(parsed, vm);
         // checking options list
-        po::notify(vm);
-
-        if (vm["toNM"].as<bool>()){
-            convertToAngstrom = true;
-        }
-
-        // performs median-based SVD alignment using input file and suggested residue list
-        if (vm.count("listOfFiles")){ // perform alignment
-            //getcwd = boost::filesystem::path full_path(boost::filesystem::current_path());
-            Aligner alignit(listOfFiles, boost::filesystem::current_path().string());
-            alignit.align();
-            std::cout << " Align file " << std::endl;
-        }
-
-        if (vm.count("bfactor") || vm.count("contrast")){
-
-            if (bfactor < 0){
-                std::cerr << "ERROR: B-Factor can not be NEGATIVE :: " << bfactor << std::endl;
-                return ERROR_IN_COMMAND_LINE;
-            }
-
-            if (cx < 0){
-                std::cerr << "ERROR: Contrast Term (CX) can not be NEGATIVE :: " << cx << std::endl;
-                return ERROR_IN_COMMAND_LINE;
-            }
-
-            std::cout << "B-Factor " << bfactor << std::endl;
-            std::cout << "Contrast " << cx << std::endl;
-        }
-
         if (vm.count("help") || !vm.count("pdb-files")) {
             std::cout << generic << "\n";
             return SUCCESS;
         }
 
+        po::notify(vm);
 
-        if (datFile.empty()){ // simulate using specified cx anc bf values
+         if (vm["toNM"].as<bool>()){
+             convertToAngstrom = true;
+         }
+
+         // performs median-based SVD alignment using input file and suggested residue list
+         if (vm.count("listOfFiles")){ // perform alignment
+             //getcwd = boost::filesystem::path full_path(boost::filesystem::current_path());
+             Aligner alignit(listOfFiles, boost::filesystem::current_path().string());
+             alignit.align();
+             std::cout << " Align file " << std::endl;
+         }
+
+         if (vm.count("occupancy") || vm.count("contrast")){
+
+             if (co < 0){
+                 std::cerr << "ERROR: Occupancy can not be NEGATIVE :: " << co << std::endl;
+                 return ERROR_IN_COMMAND_LINE;
+             }
+
+             if (cx < 0){
+                 std::cerr << "ERROR: Contrast Term (CX) can not be NEGATIVE :: " << cx << std::endl;
+                 return ERROR_IN_COMMAND_LINE;
+             }
+
+             std::cout << "Occupancy " << co << std::endl;
+             std::cout << "Contrast " << cx << std::endl;
+         }
+//
+//
+//
+//         if (datFile.empty()){ // simulate using specified cx anc bf values
+//
+//             std::cout << "Dat file empty simulating in vacuo" << std::endl;
+//             std::vector<float> qvalues;
+//             float delta = (qmax-qmin)/(float)ns;
+//             for(int i=0; i<ns; i++){
+//                 qvalues.push_back((float)(i+1)*delta);
+//             }
+//
+//             for(const std::string& filename : filenames){
+//
+//                 SASTOOLS_UTILS_H::logger("FITTING MODEL FILE",filename);
+//                 AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
+//
+//                 // if dmax is not specified, must retrieve from PDB
+//                 // dmax should really be based on the empirical value not model taken from IofQfile
+//                 if (!vm.count("dmax")){
+//                     dmax = model.getDmax();
+//                 }
+//
+//                 SASTOOLS_UTILS_H::logger("DMAX SET", std::to_string(dmax));
+//
+//                 unsigned lmax = 2*(unsigned int)((qmax*dmax)/SIMDE_MATH_PI) + 1;
+//                 SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
+//                 SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes MODEL");
+//                 model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues);
+//
+//                 if (invacuo) {
+//
+//                 } else { // simulate with waters
+//                     Waters waters = Waters();
+//
+//                     if (keepWaters){
+//
+//                         waters.extractWatersFromAtomisticModel(model);
+//
+//                     } else {
+//
+//                         waters.hydrateAtomisticModel(model); // add waters to PDB
+//                         waters.createSphericalCoordinateOfHydration();
+//
+//                         waters.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues);
+//                         std::string name = model.getPDBModel().getFileStemName();
+//
+//                         // translate water model back to original input coordinates
+//                         waters.translateAndWriteWatersToFile(name + "_hydration_model", model.getPDBModel().getCenteringVector());
+//                     }
+//
+//                     // create water model
+//                     Fit simulated = Fit(lmax);
+//                     simulated.simulate(cx, co, qvalues, model, waters);
+//
+//                 }
+//             }
+//
+//             return 0;
+//
+//         }
+//
+//         if (!ensemble) { // fit data
+//
+//             iofqdata = IofQData(datFile, convertToAngstrom);
+//             iofqdata.extractData(); // assume dmax is not set as data from other facilities will not be compatible with Scatter format
+//
+//             if (iofqdata.getDmax() < 1 && !vm.count("dmax")) {
+//                 std::cerr << "ERROR: DMAX of dataset must be specified, not found in IofQ file" << std::endl;
+//                 return ERROR_IN_COMMAND_LINE;
+//             }
+//
+//             if (iofqdata.getShannonBins() < 1) { // dmax is specified
+//                 iofqdata.setDmax(dmax); // dmax is specific to the experimental data, ideally, no model should exceed this....
+//             } else {
+//                 dmax = iofqdata.getDmax();
+//             }
+//
+//             // need to use qmax if specifz0ied otherwise stick to IofQ qmax
+//             if (vm.count("qmax") > 0){
+//                 qmax = vm["qmax"].as<float>() < iofqdata.getQmax() ? vm["qmax"].as<float>() : iofqdata.getQmax();
+//             }
+//
+//             // truncate q-values of iofqdata to specified qmax
+//             if (qmax < iofqdata.getQmax()){
+//                 iofqdata.truncateToQmax(qmax);
+//             }
+//
+//             unsigned lmax = (unsigned int)((qmax*dmax)/SIMDE_MATH_PI) + 1;
+//             SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
+//
+//             // check that the cx and co are sensible
+//             try {
+//                 checkCORange(colow, cohi);
+//                 checkCXRange(cxlow, cxhi);
+//                 checkCX(cx);
+//             } catch (std::string & fl) {
+//                 std::cerr << fl << std::endl;
+//                 return ERROR_IN_COMMAND_LINE;
+//             }
+//
+//             std::vector<std::string> logfileOutput;
+//
+//             // chi free fitting is default
+//             if (!noChiFree && !vm.count("contrast") && !vm.count("occupancy")){
+//
+//                 Fit fitting = Fit(lmax, divisions, cxlow, cxhi, colow, cohi);
+//
+//                 for(const std::string& filename : filenames){
+//
+//                     try{
+//                         AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
+//
+//                         if (model.getPDBModel().getTotalResidues() < 1){
+//                             throw (filename);
+//                         }
+//
+//                         // if atomFile present load the atom descriptors
+//                         if (vm.count("atomFile")){
+//                             if (!model.getPDBModel().validateATOMTYPESFileFormat(atomFile)){
+//                                 std::cerr << "ERROR: check input --atomFile : "  << atomFile << std::endl;
+//                                 exit(0);
+//                             }
+//
+//                             model.getPDBModel().updateAtomDescriptions(atomFile);
+//                             exit(0);
+//                         }
+//
+//                         SASTOOLS_UTILS_H::logger("Model DMAX", std::to_string(model.getDmax()));
+//                         SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes MODEL");
+//
+//                         Waters waters = Waters();
+//                         waters.hydrateAtomisticModel(model); // add waters to PDB
+//                         waters.createSphericalCoordinateOfHydration();
+//
+//                         fitting.chiFreeSearch(rounds, iofqdata, model, waters);
+//
+//                         if (writeWaters){
+//                             std::string name = model.getPDBModel().getFileStemName();
+//                             model.getPDBModel().getCenteringVector();
+//                             waters.translateAndWriteWatersToFile(name + "_hydration_model", model.getPDBModel().getCenteringVector());
+//                         }
+//
+//                         logfileOutput.emplace_back(fitting.getScoreText(model.getPDBModel().getFileStemName()));
+//
+//                     } catch (std::string & fl){
+//                         SASTOOLS_UTILS_H::logger("Improper PDB file", "skipping..." + fl);
+//                     }
+//                 }
+//
+//             } else {
+//
+//                 iofqdata.setAllDataToWorkingSet();
+//
+//
+//
+//                 // no chi free, use same working set for all PDB files in fit
+// //                iofqdata.makeWorkingSet(3);
+//                 std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
+//                 // can fit with specified cx and b-factor or do a search
+//                 // if fitting multiple PDB files to dataset with no chiFree, use same working set
+//
+//                 for(const std::string& filename : filenames){
+//
+//                     SASTOOLS_UTILS_H::logger("FITTING MODEL FILE",filename);
+//
+//                     // dmax should really be based on the empirical value not model taken from IofQfile
+//
+//                     try{
+//
+//                         AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
+//
+//                         if (model.getPDBModel().getTotalResidues() < 1){
+//                             throw (filename);
+//                         }
+//
+//                         SASTOOLS_UTILS_H::logger("Model DMAX", std::to_string(model.getDmax()));
+//                         SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes MODEL");
+//
+//                         model.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues);
+//
+//                         // create water model
+//                         Waters waters = Waters();
+//                         waters.hydrateAtomisticModel(model); // add waters to PDB
+//                         waters.createSphericalCoordinateOfHydration();
+//                         waters.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues);
+//
+//                         if (writeWaters){
+//                             std::string name = model.getPDBModel().getFileStemName();
+//                             model.getPDBModel().getCenteringVector();
+//                             waters.translateAndWriteWatersToFile(name + "_hydration_model", model.getPDBModel().getCenteringVector());
+//                         }
+//
+//                         if (!vm.count("contrast")){ // no Chi-free fitting single working set only
+//
+//                             Fit fitting = Fit(lmax, divisions, cxlow, cxhi, colow, cohi);
+//                             SASTOOLS_UTILS_H::logger("", "Grid Search of B-factor and Cx");
+//                             fitting.search(iofqdata, model, waters);
+//                             // append a summary file with the best fitted parameters so a user could
+//                             logfileOutput.push_back(fitting.getScoreText(model.getPDBModel().getFileStemName()));
+//
+//                         } else {
+//
+//                             Fit fitting = Fit(lmax);
+//
+//                             if (vm.count("contrast")) { // fit using fixed contrast and occupancy
+//
+//                                 // working set was set above to 3 times Shannon Number, but for fixed fitting should do all?
+//                                 iofqdata.setAllDataToWorkingSet();
+//                                 std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
+//                                 // recalculate Partials for the initial models
+//                                 waters.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
+//                                 model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
+//
+//                                 fitting.fitFixedCoAndCx(iofqdata, model, waters, co, cx);
+//                                 // (qvalues, iofqdata.getFilename(), model);
+//                                 fitting.writeBestModelToFile(qvalues, iofqdata.getFilename(), model);
+//
+//                             } else if (vm.count("occupancy")){ // search contrast with fixed bfactor
+//
+//                                 fitting.searchCX(iofqdata, model, waters, co, cxlow, cxhi, divisions);
+//
+//                             } else if (vm.count("contrast")){ // search bfactor with fixed contrast
+//
+//                                 //fitting.searchBFactor(iofqdata, model, waters, cx, upperB, divisions);
+//                             }
+//
+//                             logfileOutput.emplace_back(fitting.getScoreText(model.getPDBModel().getFileStemName()));
+//                         }
+//
+//                     } catch (std::string & fl){
+//                         SASTOOLS_UTILS_H::logger("Improper PDB file", "skipping..." + fl);
+//                     }
+//                 }
+//             }
+//
+//             // write logfile
+//             FILE * pFile = fopen("fit_summary.txt", "w");
+//             fprintf(pFile, "  SCORE    CHI2   DW    CX  BFactor NAME\n");
+//             for(auto & line : logfileOutput){
+//                 fprintf(pFile, line.c_str());
+//             }
+//             fclose(pFile);
+//
+//
+//         } else if (ensemble){
+//
+//             Ensemble ens = Ensemble(filenames, std::filesystem::current_path().string());
+//
+//             iofqdata = IofQData(datFile, convertToAngstrom);
+//             iofqdata.extractData();
+//
+//             if (iofqdata.getDmax() < 1 && !vm.count("dmax")) {
+//                 std::cerr << "ERROR: DMAX of dataset must be specified, not found in IofQ file" << std::endl;
+//                 return ERROR_IN_COMMAND_LINE;
+//             } else if (iofqdata.getShannonBins() < 1) { // dmax is specified
+//                 iofqdata.setDmax(dmax); // dmax is specific to the experimental data, ideally, no model should exceed this....
+//             } else {
+//                 dmax = iofqdata.getDmax();
+//             }
+//
+//             // need to use qmax if specified otherwise stick to IofQ qmax
+//             if (vm.count("qmax") > 0){
+//                 qmax = vm["qmax"].as<float>() < iofqdata.getQmax() ? vm["qmax"].as<float>() : iofqdata.getQmax();
+//             }
+//
+//             // truncate q-values of iofqdata to specified qmax
+//             if (qmax < iofqdata.getQmax()){
+//                 iofqdata.truncateToQmax(qmax);
+//             }
+//
+//             ens.ce_search(iofqdata, cx, co, dmaxFilter);
+//             //ens.combinatorial_search(iofqdata, cx, bfactor);
+//
+//         }
+
+    // } catch (boost::program_options::required_option& e){
+    //
+    //     //if (!vm.count("help")) {
+    //         std::cerr << "ERROR: " << e.what() << std::endl;
+    //     std::cerr << generic << std::endl;
+    //         return ERROR_IN_COMMAND_LINE;
+    //     //}
+
+    } catch (boost::program_options::error& e){
+
+        std::cerr << "ERROR:: " << e.what() << std::endl;
+        return ERROR_IN_COMMAND_LINE;
+
+    } catch (const std::invalid_argument& e){
+
+        std::cerr << "ERROR: " << e.what() << std::endl;
+        std::cerr<<"Type "<<typeid(e).name()<<std::endl;
+
+    }
+
+
+    if (datFile.empty()){ // simulate using specified cx anc bf values
 
             std::cout << "Dat file empty simulating in vacuo" << std::endl;
             std::vector<float> qvalues;
@@ -231,14 +523,16 @@ int main(int argc, const char *const *argv) {
 
                     // create water model
                     Fit simulated = Fit(lmax);
-                    simulated.simulate(cx, bfactor, qvalues, model, waters);
+                    simulated.simulate(cx, co, qvalues, model, waters);
 
                 }
             }
 
             return 0;
 
-        } else if (!ensemble) { // fit data
+        }
+
+        if (!ensemble) { // fit data
 
             iofqdata = IofQData(datFile, convertToAngstrom);
             iofqdata.extractData(); // assume dmax is not set as data from other facilities will not be compatible with Scatter format
@@ -246,13 +540,15 @@ int main(int argc, const char *const *argv) {
             if (iofqdata.getDmax() < 1 && !vm.count("dmax")) {
                 std::cerr << "ERROR: DMAX of dataset must be specified, not found in IofQ file" << std::endl;
                 return ERROR_IN_COMMAND_LINE;
-            } else if (iofqdata.getShannonBins() < 1) { // dmax is specified
+            }
+
+            if (iofqdata.getShannonBins() < 1) { // dmax is specified
                 iofqdata.setDmax(dmax); // dmax is specific to the experimental data, ideally, no model should exceed this....
             } else {
                 dmax = iofqdata.getDmax();
             }
 
-            // need to use qmax if specified otherwise stick to IofQ qmax
+            // need to use qmax if specifz0ied otherwise stick to IofQ qmax
             if (vm.count("qmax") > 0){
                 qmax = vm["qmax"].as<float>() < iofqdata.getQmax() ? vm["qmax"].as<float>() : iofqdata.getQmax();
             }
@@ -265,9 +561,9 @@ int main(int argc, const char *const *argv) {
             unsigned lmax = (unsigned int)((qmax*dmax)/SIMDE_MATH_PI) + 1;
             SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
 
-            // check that the cx and bfactors are sensible
+            // check that the cx and co are sensible
             try {
-                checkUpperB(upperB);
+                checkCORange(colow, cohi);
                 checkCXRange(cxlow, cxhi);
                 checkCX(cx);
             } catch (std::string & fl) {
@@ -278,9 +574,9 @@ int main(int argc, const char *const *argv) {
             std::vector<std::string> logfileOutput;
 
             // chi free fitting is default
-            if (!noChiFree && !vm.count("upperB") && !vm.count("contrast")){
+            if (!noChiFree && !vm.count("contrast") && !vm.count("occupancy")){
 
-                Fit fitting = Fit(lmax, divisions, cxlow, cxhi, upperB);
+                Fit fitting = Fit(lmax, divisions, cxlow, cxhi, colow, cohi);
 
                 for(const std::string& filename : filenames){
 
@@ -325,11 +621,13 @@ int main(int argc, const char *const *argv) {
                 }
 
             } else {
+
+                iofqdata.setAllDataToWorkingSet();
+
                 // no chi free, use same working set for all PDB files in fit
-                iofqdata.makeWorkingSet(3);
+//                iofqdata.makeWorkingSet(3);
                 std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
                 // can fit with specified cx and b-factor or do a search
-                // if fitting multiple PDB files to dataset with no chiFree, use same working set
 
                 for(const std::string& filename : filenames){
 
@@ -362,9 +660,9 @@ int main(int argc, const char *const *argv) {
                             waters.translateAndWriteWatersToFile(name + "_hydration_model", model.getPDBModel().getCenteringVector());
                         }
 
-                        if (!vm.count("upperB") && !vm.count("contrast")){ // no Chi-free fitting single working set only
+                        if (!vm.count("contrast")){ // no Chi-free fitting single working set only
 
-                            Fit fitting = Fit(lmax, divisions, cxlow, cxhi, upperB);
+                            Fit fitting = Fit(lmax, divisions, cxlow, cxhi, colow, cohi);
                             SASTOOLS_UTILS_H::logger("", "Grid Search of B-factor and Cx");
                             fitting.search(iofqdata, model, waters);
                             // append a summary file with the best fitted parameters so a user could
@@ -374,7 +672,7 @@ int main(int argc, const char *const *argv) {
 
                             Fit fitting = Fit(lmax);
 
-                            if (vm.count("bfactor") && vm.count("contrast")) { // fit using fixed bfactor and contrast
+                            if (vm.count("contrast")) { // fit using fixed contrast and occupancy
 
                                 // working set was set above to 3 times Shannon Number, but for fixed fitting should do all?
                                 iofqdata.setAllDataToWorkingSet();
@@ -383,17 +681,17 @@ int main(int argc, const char *const *argv) {
                                 waters.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
                                 model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
 
-                                fitting.fitFixedCxandBFactor(iofqdata, model, waters, bfactor, cx);
+                                fitting.fitFixedCoAndCx(iofqdata, model, waters, co, cx);
                                 // (qvalues, iofqdata.getFilename(), model);
                                 fitting.writeBestModelToFile(qvalues, iofqdata.getFilename(), model);
 
-                            } else if (vm.count("bfactor")){ // search contrast with fixed bfactor
+                            } else if (vm.count("occupancy")){ // search contrast with fixed bfactor
 
-                                fitting.searchCX(iofqdata, model, waters, bfactor, cxlow, cxhi, divisions);
+                                fitting.searchCX(iofqdata, model, waters, co, cxlow, cxhi, divisions);
 
                             } else if (vm.count("contrast")){ // search bfactor with fixed contrast
 
-                                fitting.searchBFactor(iofqdata, model, waters, cx, upperB, divisions);
+                                //fitting.searchBFactor(iofqdata, model, waters, cx, upperB, divisions);
                             }
 
                             logfileOutput.emplace_back(fitting.getScoreText(model.getPDBModel().getFileStemName()));
@@ -440,35 +738,10 @@ int main(int argc, const char *const *argv) {
                 iofqdata.truncateToQmax(qmax);
             }
 
-            ens.ce_search(iofqdata, cx, bfactor, dmaxFilter);
+            ens.ce_search(iofqdata, cx, co, dmaxFilter);
             //ens.combinatorial_search(iofqdata, cx, bfactor);
 
         }
-
-    } catch (boost::program_options::required_option& e){
-
-        if (!vm.count("help")) {
-            std::cerr << "ERROR: " << e.what() << std::endl;
-            return ERROR_IN_COMMAND_LINE;
-        }
-
-    } catch (boost::program_options::error& e){
-
-        std::cerr << "ERROR: " << e.what() << std::endl;
-        return ERROR_IN_COMMAND_LINE;
-
-    } catch (const std::invalid_argument& e){
-
-        std::cerr << "ERROR: " << e.what() << std::endl;
-        std::cerr<<"Type "<<typeid(e).name()<<std::endl;
-
-    }
-
-//    if (vm.count("help") || !vm.count("pdb-files")) {
-//        std::cout << generic << "\n";
-//        return SUCCESS;
-//    }
-
 
     return 0;
 

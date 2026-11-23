@@ -27,7 +27,6 @@
 #include <vector>
 
 class Result {
-
 public:
     float score;
 
@@ -35,7 +34,7 @@ private:
 
     float scale;
     float cx;
-    float bfactor;
+    float co;
     float dw;         // Durbin-Watson
     float chi;        // chi
     std::vector<float> i_calc; // model
@@ -43,14 +42,24 @@ private:
 
 public:
 
-    Result(){};
+    Result() {
+        std::cout << i_calc.size() << std::endl;
+    }
 
-    Result(float score, float scale, float cx, float b, float dw, float chi, std::vector<float> & icalc, const std::vector<unsigned int> & indices) : score(score), scale(scale), cx(cx), bfactor(b), dw(dw), chi(chi) {
+    Result(float score, float scale, float cx, float co, float dw, float chi, std::vector<float> & icalc, const std::vector<unsigned int> & indices) :
+    score(score),
+    scale(scale),
+    cx(cx),
+    co(co),
+    dw(dw),
+    chi(chi) {
 
-        this->i_calc.swap(icalc); // if i_calc is empty, now guarantee icalc is empty
+        if (!icalc.empty()) {
+            this->i_calc.swap(icalc); // if i_calc is empty, now guarantee icalc is empty
+        }
 
         unsigned int total = i_calc.size();
-        selectedIndices.resize(total);
+        selectedIndices = std::vector<unsigned int>(total);
         const unsigned int * index = indices.data();
         unsigned int * sindex = selectedIndices.data();
 
@@ -59,11 +68,69 @@ public:
         }
     };
 
+
+    // copy constructor
+    Result(const Result &src) = delete;
+
+    // move constructor
+    Result(Result &&src) {
+        score = src.score;
+        scale = src.scale;
+        cx = src.cx;
+        co = src.co;
+        dw = src.dw;         // Durbin-Watson
+        chi = src.chi;        // chi
+
+        if (!src.i_calc.empty()) {
+            i_calc = std::vector<float>();
+            std::swap(src.i_calc, i_calc);
+        }
+
+        if (!src.selectedIndices.empty()) {
+            selectedIndices = std::vector<unsigned int>();
+            std::swap(src.selectedIndices, selectedIndices);
+        }
+
+    }
+
+    ~Result()=default;
+
+    // copy assignment operator
+    Result& operator=(const Result &rhs) = delete;
+
+    // move assignment operator // transfer ownership
+    Result& operator=(Result &&rhs) noexcept {
+
+        if (&rhs == this){
+            return *this;
+        }
+
+        score = rhs.score;
+        scale = rhs.scale;
+        cx = rhs.cx;
+        co = rhs.co;
+        dw = rhs.dw;         // Durbin-Watson
+        chi = rhs.chi;        // chi
+
+        if (!rhs.i_calc.empty()) {
+            i_calc = std::vector<float>();
+            std::swap(rhs.i_calc, i_calc);
+        }
+
+        if (!rhs.selectedIndices.empty()) {
+            selectedIndices = std::vector<unsigned int>();
+            std::swap(rhs.selectedIndices, selectedIndices);
+        }
+        return *this;
+    }
+
     float getScore(){ return score;}
     float getDurbinWatson(){ return dw;}
     float getChi(){ return chi;}
-    float getBfactor(){ return bfactor;}
     float getCX(){ return cx; }
+    float getCO(){ return co; }
+    float getScale() {return scale; }
+
 
     std::vector<float> & getICalc(){ return i_calc;}
     std::vector<unsigned int> & getSelectedIndices(){ return selectedIndices;}

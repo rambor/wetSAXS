@@ -28,23 +28,27 @@
 #include "AtomisticModel.h"
 #include "Waters.h"
 #include "Result.h"
+#include "Mask.h"
 
 class Fit {
 
     unsigned int lmax, total_cx;
     float lowcx, highcx;
     float deltaCX;
-    float upper_Bfactor;
 
     float bestScore;
-    float bestBfactor, bestCx, bestScaleCoef, bestDW, bestChi, bestBackground;
+    float bestCx, bestOcc, bestDW, bestChi, bestBackground;
+    float bestScaleCoef = -1;
+
+    float high_c_occ = 1.21, low_c_occ = 0.1;
     const float inv16Pi2 = 1.0/(16.0*M_PI_2);
 
     std::vector<float> norm_aPs;
-    std::vector<float> norm_aPWs;
     std::vector<float> norm_aWs;
     std::vector<float> norm_aCs;
     std::vector<float> aXW_cross_term;
+    std::vector<float> aPX_cross_term;
+    std::vector<float> aPW_cross_term;
 
     std::vector<float> i_best;
     std::vector<float> i_obs;
@@ -55,18 +59,20 @@ class Fit {
 
 public:
     Fit(unsigned int lmax);
-    Fit(unsigned int lmax, unsigned int division, float lowcx, float highcx, float upper_Bfactor);
+    Fit(unsigned int lmax, unsigned int division, float lowcx, float highcx, float low_c_occ, float high_c_occ);
 
     void search(IofQData & iofqdata, AtomisticModel & model, Waters & waterModel);
-    void searchBFactor(IofQData & iofqdata,
+    void searchWithMask(IofQData & iofqdata, AtomisticModel & model, Waters & waterModel, Mask & mask);
+
+    void searchCOFactor(IofQData & iofqdata,
                        AtomisticModel & model,
                        Waters & waterModel,
                        float fixedCx,
-                       float upperB,
-                       int totalB);
+                       float colo,
+                       float cohi,
+                       int totalCO);
 
     float getBestCx(){ return bestCx;} // excluded volume
-    float getBestBfactor(){ return bestBfactor; }
     float getBestDW(){ return bestDW; }
     void printBestScores();
 
@@ -77,15 +83,42 @@ public:
     void writeIcalcAtCXToFile(std::string name, unsigned int total, const std::vector<float> & qvalues, std::vector<float> & icalc,  std::vector<float> & diffA);
 
     void assemblePartials(AtomisticModel &model, Waters &waterModel,
-                          std::vector<float> &norm_aPs,
-                          std::vector<float> &norm_aPWs,
-                          std::vector<float> &norm_aWs,
-                          std::vector<float> &norm_aCs,
-                          std::vector<float> &aXW_cross_term,
-                          unsigned int totalInWorkingSet);
+        std::vector<float> & norm_Pamps,
+        std::vector<float> & norm_Wamps,
+        std::vector<float> & norm_Camps,
+        std::vector<float> & aPW_cross_terms,
+        std::vector<float> & aPX_cross_terms,
+        std::vector<float> & aXW_cross_terms,
+        unsigned int totalInWorkingSet);
 
     void assemblePartials(AtomisticModel &model, Waters &waterModel,
                               unsigned int totalInWorkingSet);
+
+    void assemblePartialsWithMask(AtomisticModel &model,
+                               Mask &mask,
+                               unsigned int totalInWorkingSet);
+
+    float calculateIofQfromModelWithVariances(unsigned int totalInWorkingSet,
+                                          const float *pQ,
+                                          const float *pAp,
+                                          const float *pAc,
+                                          const float *pAw,
+                                          const float *pAXW_cross_term,
+                                          const float *pAPX_cross_term,
+                                          const float *pAPW_cross_term,
+                                          float cx,
+                                          float co,
+                                          float *pIcalc);
+
+    float calculateIofQfromModelWithVariancesMask(unsigned int totalInWorkingSet,
+                                      const float *pQ,
+                                      const float *pAp,
+                                      const float *pAc,
+                                      const float *pAXW_cross_term,
+                                      const float *pAPX_cross_term,
+                                      float cx,
+                                      float co,
+                                      float *pIcalc);
 
     float calculateIofQfromModelWithVariances(unsigned int totalInWorkingSet,
                                               const float *pQ,
@@ -105,37 +138,45 @@ public:
                                               float b_factor,
                                               float *pIcalc);
 
+
     void calculateIofQfromModel(unsigned int totalInWorkingSet,
-                                const float *pQ, // q values (vector)
-                                const float *pApw, // hydrated particle squared amplitude (vector)
-                                const float *pAc,  // squared amplitude excluded volume (vector)
-                                const float *pAXW_cross_term, // cross-term (vector)
-                                 float cx, // contrast
-                                 float b_factor, // b-factor
-                                 float *pIcalc // output vector
-                                 );
+                                           const float * pQ,
+                                           const float * pAp,
+                                           const float * pAw,
+                                           const float * pAc,
+                                           const float * pAPW_cross_term,
+                                           const float * pAPX_cross_term,
+                                           const float * pAXW_cross_term,
+                                           float cx,
+                                           float co,
+                                           float * pIcalc
+                                           );
+
 
     void writeModelToFile(float cx,
                           float bfactor,
                           std::vector<float> &qvalues,
                           AtomisticModel & model,
                           std::vector<float> &icalc,
-                          const float * aP,  // particle amplitude
-                          const float *HP,
-                          const float * aC,  // excluded volume
-                          const float * aCXP // cross-term
+                          const float * pAp,  // particle amplitude
+                          const float * pAw,  // hydrated particle amplitude
+                          const float * pAc,  // excluded volume
+                          const float * pPW_cross_term, // cross-term
+                          const float * pPX_cross_term, // cross-term
+                          const float * pXW_cross_term // cross-term
                           );
 
     void simulate(float cx, float bfactor, std::vector<float> &qvalues, AtomisticModel &model, Waters &waterModel);
 
     void setUpForFitting(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel);
+    void setUpForFittingWithMask(IofQData &iofqdata, AtomisticModel &model, Mask &maskModel);
 
     void
     searchCX(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel, float fixedBF, float lowerCX, float upperCX,
              int divisions);
 
-    void
-    fitFixedCxandBFactor(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel, float fixedBF, float fixedCX);
+    void fitFixedCoAndCx(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel, float fixedCO, float fixedCX);
+
 
     void assemblePartialsFastHalf(AtomisticModel &model, Waters &waterModel, std::vector<float> &norm_aPs,
                                   std::vector<float> &norm_aPWs, std::vector<float> &norm_aWs,
@@ -149,14 +190,14 @@ public:
                                IofQData & iofqdata,
                                unsigned int totalRNDS);
 
-    float * getAP() { return norm_aPWs.data(); }
+
 
     std::string getScoreText(std::string filename){
 
         char buffer [50];
 
         sprintf (buffer, "%8.3f %6.3f %5.3f %5.3f %5.1f %s\n", bestScore, bestChi,
-                 bestDW, bestCx, bestBfactor, filename.c_str()); // change the number to a string for name
+                 bestDW, bestCx, bestOcc, filename.c_str()); // change the number to a string for name
 
         return buffer;
     }

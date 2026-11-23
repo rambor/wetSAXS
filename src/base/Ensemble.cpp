@@ -92,13 +92,28 @@ void Ensemble::search(unsigned int lmax, IofQData * iofqfile, bool forceRNA, boo
                 Amplitudes * pCalc = &models[total]; //
 
                 std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+                std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
                 std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
-                std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+                std::vector<float> aPW_cross_terms = std::vector<float>(totalInWorkingSet);
+                std::vector<float> aPX_cross_terms = std::vector<float>(totalInWorkingSet);
+                std::vector<float> aXW_cross_terms = std::vector<float>(totalInWorkingSet);
 
                 // assemble the partials and
-                assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
-                pCalc->addValues(aPs, aPWs, aCs, aXW_cross_term);
+                assemblePartials(lmax, model, waters,
+                    aPs,
+                    aWs,
+                    aCs,
+                    aPW_cross_terms,
+                    aPX_cross_terms,
+                    aXW_cross_terms,
+                    totalInWorkingSet);
+
+                pCalc->addValues(aPs,
+                    aWs,
+                    aCs,
+                    aPW_cross_terms,
+                    aPX_cross_terms,
+                    aXW_cross_terms);
 
                 indices.push_back(total);
                 total++;
@@ -244,13 +259,14 @@ void Ensemble::search(unsigned int lmax, IofQData * iofqfile, bool forceRNA, boo
 
 
 void Ensemble::assemblePartials(unsigned int lmax, AtomisticModel &model,
-                           Waters &waterModel,
-                           unsigned int totalInWorkingSet,
-                           std::vector<float> & aP,
-                           std::vector<float> & pPW,
-                           std::vector<float> & pCX,
-                           std::vector<float> & pCrossterm
-                           ){
+                            Waters &waterModel,
+                            std::vector<float> & Ap,
+                            std::vector<float> & Aw,
+                            std::vector<float> & Ac,
+                            std::vector<float> & aPW_cross_terms,
+                            std::vector<float> & aPX_cross_terms,
+                            std::vector<float> & aXW_cross_terms,
+                            unsigned int totalInWorkingSet ){
 
     const float * almPR = model.getModelPartialsReal();
     const float * almPI = model.getModelPartialsImag();
@@ -260,12 +276,14 @@ void Ensemble::assemblePartials(unsigned int lmax, AtomisticModel &model,
     const float * wlmR = waterModel.getModelPartialsReal();
     const float * wlmI = waterModel.getModelPartialsImag();
 
-    float * pAP = aP.data();
-    float * pApw = pPW.data();
-    float * pAc = pCX.data();
+    float * pAp = Ap.data();
+    float * pAw = Aw.data();
+    float * pAc = Ac.data();
 
     // cross-terms
-    float * pAXW_cross_term = pCrossterm.data();
+    float * pApw_cross_term = aPW_cross_terms.data();
+    float * pApx_cross_term = aPX_cross_terms.data();
+    float * pAxw_cross_term = aXW_cross_terms.data();
 
     float a_p_norm, a_x_norm, a_w_norm, aPWR_term, aPWI_term, aXWR_term, aXWI_term;
     float x_w_r, x_w_i;
@@ -323,10 +341,17 @@ void Ensemble::assemblePartials(unsigned int lmax, AtomisticModel &model,
         }
 
         // PI constant gets absorbed into the scaling constant below during the chi2 fit
-        pAP[q] = a_p_norm;
-        pAc[q] = a_x_norm; // excluded volume
-        pApw[q] = a_p_norm + a_w_norm + 2.0f*(aPWR_term + aPWI_term); // hydratedParticle term
-        pAXW_cross_term[q] = -2.0f*(aXWR_term + aXWI_term + aPXR_term + aPXI_term); // invert phase
+        // PI constant gets absorbed into the scaling constant below during the chi2 fit
+        pAp[q] = a_p_norm; //*pi_constant;
+        pAw[q] = a_w_norm; //
+        pAc[q] = a_x_norm; // => a^x -> scaled by contrast term
+
+        //pApw[q] = a_p_norm + a_w_norm*occ*occ + 2.0f*occ*(aPWR_term + aPWI_term); // hydratedParticle
+        pApw_cross_term[q] = 2.0f*(aPWR_term + aPWI_term); // hydratedParticle
+
+        // invert phase - this is a cross term that remains that reflects the cross term with surrounding solvent (not layer)
+        pApx_cross_term[q] = -2.0f*(aPXR_term + aPXI_term); // * c_x
+        pAxw_cross_term[q] = -2.0f*(aXWR_term + aXWI_term); // * c_x x c_o
 
     } // end loop over q values
 }
@@ -349,31 +374,42 @@ float Ensemble::calculateDurbinWatson(float *residuals, unsigned int total) {
     return val*val;
 }
 
-float Ensemble::populateIntensitiesMatrix(unsigned int totalInWorkingSet, float *qvalues,
-                                                    std::vector<Amplitudes> models,
-                                                    float cx,
-                                                    float b_factor,
-                                                    boost::numeric::ublas::matrix<float> & intensities) {
+void Ensemble::populateIntensitiesModel(unsigned int totalInWorkingSet,
+    unsigned int lmax,
+    AtomisticModel &pdbmodel,
+    Waters &waterModel,
+    boost::numeric::ublas::matrix<float> & models,
+    float cx,
+    float co,
+    unsigned int mdl_cnt) {
 
-    float q_val;
-    float exp_term, exp_2;
 
-    unsigned int total_models = models.size();
+    std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
+    std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
+    std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
+    std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+    std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+    std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
-    for(unsigned int q =0; q < totalInWorkingSet; q++) {
+    // assemble the partials and
+    this->assemblePartials(lmax, pdbmodel, waterModel, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
 
-        q_val = qvalues[q]; // get qvalue to calculate b-factor
-        exp_term = expf(-(q_val*q_val)*b_factor*inv16Pi2)*cx;
-        exp_2 = exp_term*exp_term;
+    float * pAps = aPs.data();
+    float * pWs = aWs.data();
+    float * pCs = aCs.data();
+    float * pXW_cross_term = aXW_cross_term.data();
+    float * pPW_cross_term = aPW_cross_term.data();
+    float * pPX_cross_term = aPX_cross_term.data();
 
-        // update matrix column elements (fixed q row)
-        for(unsigned int n=0; n<total_models; n++){
-            auto & model = models[n];
-            intensities(q,n) = model.pAPWs[q] + model.pExVols[q]*exp_2 + exp_term*model.pACrossTerms[q];
-        }
+    float co2 = co*co;
+    float cx2 = cx*cx;
+    float cocx = co*cx;
+
+    // combine
+    for(unsigned int q=0; q<totalInWorkingSet; q++){
+        models(q, mdl_cnt)  = pAps[q] + pWs[q]*co2 + co*pPW_cross_term[q] + cocx * pXW_cross_term[q] + cx * pPX_cross_term[q] + pCs[q]*cx2;
     }
 
-    return 0;
 }
 
 /*

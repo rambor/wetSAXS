@@ -26,6 +26,7 @@
 
 #include <vector>
 #include <string>
+#include <random>
 #include <sastools/vector3.h>
 #include <sastools/PDBModel.h>
 #include <sastools/Bead.h>
@@ -33,10 +34,34 @@
 #include "SphericalHarmonics.h"
 #include "SphericalBessels.h"
 #include "functions_WETSAXS.h"
+#include "Waters.h"
 
+class Waters;
 
 class AtomisticModel {
-private:
+    struct HashPair {
+        template <typename T>
+        std::size_t operator()(const std::pair<T, T>& p) const noexcept {
+            static_assert(std::is_unsigned_v<T>, "Use unsigned types for best results");
+
+            // SplitMix64 / better mixing for 64-bit
+            auto hash1 = splitmix64(p.first);
+            auto hash2 = splitmix64(p.second);
+
+            // Combine with good avalanche
+            hash1 ^= hash2 + 0x9e3779b97f4a7c15ULL + (hash1 << 6) + (hash1 >> 2);
+            return hash1;
+        }
+
+    private:
+        static uint64_t splitmix64(uint64_t x) noexcept {
+            x += 0x9e3779b97f4a7c15ULL;
+            x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+            x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+            return x ^ (x >> 31);
+        }
+    };
+
 
     std::string filename;
     bool forceRNA = false;
@@ -53,13 +78,14 @@ private:
 
     // setup for dynamically allocated arrays
     std::vector<float> rvalues;
+    std::vector<float> paired_r_values;
     std::vector<float> thetas; // could be aligned memory
     std::vector<float> phis;
     std::vector<float> bead_rvalues;
     std::vector<float> bead_thetas; // could be aligned memory
     std::vector<float> bead_phis;
 
-    std::vector<float> binned_distances;
+    std::vector<float> ex_volume_weights;
     std::vector<float> almRealSum; // partial sums
     std::vector<float> almImagSum;
     std::vector<float> almRealExcludedVolSum; // partial sums
@@ -72,8 +98,11 @@ private:
     std::set <int> atomList;
 
     //std::map <std::string, int> hydrogens;
-    std::map<unsigned int, std::vector<unsigned int>> neighbors;
-    std::map<unsigned int, std::vector<unsigned int>> non_neighbors;
+    //    std::map<unsigned int, std::vector<unsigned int>> neighbors;
+    std::vector<unsigned int> neighbor_indices;   // all neighbors concatenated
+    std::vector<float>        neighbor_weights;
+    std::vector<unsigned int> neighbors_offset;
+    //    std::unordered_map<std::pair<uint64_t, uint64_t>, float, HashPair> weight_map;
 
     std::vector<float> fractionOccAtoms;
     std::vector<Bead> beads;
@@ -111,37 +140,42 @@ public:
         lmax = model.lmax;
 
         matchPoint = model.matchPoint;
+        forwardScatteringParticle = model.forwardScatteringParticle;
+        forwardScatteringExVolume = model.forwardScatteringExVolume;
 
         rvalues = std::move(model.rvalues);
+        paired_r_values = std::move(model.paired_r_values);
+
         thetas = std::move(model.thetas);
         phis = std::move(model.phis);
         bead_rvalues = std::move(model.bead_rvalues);
         bead_thetas = std::move(model.bead_thetas);
         bead_phis = std::move(model.bead_phis);
 
-        binned_distances = std::move(model.binned_distances);
+        ex_volume_weights = std::move(model.ex_volume_weights);
         almRealSum = std::move(model.almRealSum);
         almImagSum = std::move(model.almImagSum);
 
         almRealExcludedVolSum = std::move(model.almRealExcludedVolSum); // partial sums
         almImagExcludedVolSum = std::move(model.almImagExcludedVolSum);
-        binnedPartials = std::move(model.binnedPartials);
 
         clmNonNeighbors = std::move(model.clmNonNeighbors);
         clmNeighbors = std::move(model.clmNeighbors);
 
+        binnedPartials = std::move(model.binnedPartials);
         atomList = std::move(model.atomList);
-//        hydrogens = std::move(model.hydrogens);
-        neighbors = std::move(model.neighbors);
-        non_neighbors = std::move(model.non_neighbors);
+
+        neighbor_indices = std::move(model.neighbor_indices);
+        neighbor_weights = std::move(model.neighbor_weights);
+        neighbors_offset = std::move(model.neighbors_offset);
 
         fractionOccAtoms = std::move(model.fractionOccAtoms);
-
         beads = std::move(model.beads);
 
-
         she = std::move(model.she);
+        she_x = std::move(model.she_x);
         sbj = std::move(model.sbj);
+        sbj_x = std::move(model.sbj_x);
 
         rg = std::move(model.rg);
 
@@ -205,6 +239,8 @@ public:
                                                unsigned int totalqvalues,
                                                std::vector<float> &qvalues);
 
+    void addWatersToAtomicModel(Waters &waterModel);
+
     void setMatchPointScale(int * pAtomicNumbers);
     void setMatchPointScale(unsigned int totalWatersInHydration);
 
@@ -212,38 +248,40 @@ public:
 
     void createHCPGridModel(float bin_width);
 
-    void populateBinnedDistances(unsigned int lmax);
+    float addUp(unsigned int total_width, float *vector_to_sum);
+
+    void populateExVolumeWeights(Waters &waterModel);
 
     void populateSphBesselsArray(int l, std::vector<float> &qr, float *bessel_alq);
 
-    void setFractionalVolume(float volume){
-
-        fractionOccAtoms.resize(totalAtoms);
-        auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
-
-        float inv = 1.0f/volume;
-
-        for(unsigned int i=0; i<totalAtoms; i++){
-            fractionOccAtoms[i] =  pAtomicVolumes[i]*inv; // normalized to volume of water, looking at fractions of water volume
-        }
-    }
+    // void setFractionalVolume(float volume){
+    //
+    //     fractionOccAtoms.resize(totalAtoms);
+    //     auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
+    //
+    //     float inv = 1.0f/volume;
+    //
+    //     for(unsigned int i=0; i<totalAtoms; i++){
+    //         fractionOccAtoms[i] =  pAtomicVolumes[i]*inv; // normalized to volume of water, looking at fractions of water volume
+    //     }
+    // }
 
     /*
      * Convert the Gerstein-Voronoi atomic radii into Gaussian radii
      *
      */
-//    void setGaussianRadii(){
-//        auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
-//
-//        gaussian_radii.resize(totalAtoms);
-//        float * pvol;
-//        float invpi3halves = 1.0f/std::sqrtf(M_PI*M_PI*M_PI);
-//
-//        for(unsigned int i=0; i<totalAtoms; i++){
-//            pvol = &pAtomicVolumes[i];
-//            gaussian_radii[i] =  std::cbrt(*pvol * invpi3halves); // normalized to volume of water, looking at fractions of water volume
-//        }
-//    }
+    //    void setGaussianRadii(){
+    //        auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
+    //
+    //        gaussian_radii.resize(totalAtoms);
+    //        float * pvol;
+    //        float invpi3halves = 1.0f/std::sqrtf(M_PI*M_PI*M_PI);
+    //
+    //        for(unsigned int i=0; i<totalAtoms; i++){
+    //            pvol = &pAtomicVolumes[i];
+    //            gaussian_radii[i] =  std::cbrt(*pvol * invpi3halves); // normalized to volume of water, looking at fractions of water volume
+    //        }
+    //    }
 
     /*
      * Gaussian volumes where v = r^3 * pi^3/2
@@ -263,16 +301,15 @@ public:
             diff = gaussian_radii[i]/1.75f;
             factor = pw_vol*(1 - diff*diff*diff);
 
-            fractionOccAtoms[i] = 0.334*factor * std::expf(-std::cbrt(factor*factor)*inv*qval2); // normalized to volume of water, looking at fractions of water volume
+            fractionOccAtoms[i] = 0.334f*factor * std::expf(-std::cbrt(factor*factor)*inv*qval2); // normalized to volume of water, looking at fractions of water volume
         }
     }
 
 
     const float * getFractionalVolume() {
-
-        if (fractionOccAtoms.empty()){
-            setFractionalVolume(29.9); // 29.9 volume for H2O
-        }
+        // if (fractionOccAtoms.empty()){
+        //     setFractionalVolume(29.9); // 29.9 volume for H2O
+        // }
         return fractionOccAtoms.data();
     }
 
@@ -306,6 +343,214 @@ public:
 
     float getRg(){ return (rg ==0) ? this->calculateRg(): rg ;}
 
+    float calculateStructureFactorWaterAtQ(float qval) {
+
+        float delta_r = 0.02;
+        float sum = 0;
+
+        /*
+         * f_0(2.27) = 0
+         * f_1(2.29) + ... +
+         * numerical integration using trapezoid rule
+         */
+        float rval = 0.0f; // there are no distances less than 2.29 (water to water)
+        float endR = 18.2;
+
+        float sincf;
+
+        rval += delta_r;
+        unsigned int ind = 1;
+
+        while (rval < 2.3) {
+            float qr = qval * rval;
+            if (std::abs(qr) < 1e-10) {
+                sincf = 1.0f;                 // lim x→0 sin(x)/x = 1
+            } else {
+                sincf = sinc(qr);
+            }
+
+            sum += ((ind % 2 == 0) ? 2.0f : 4.0f)*rval*rval*(-1.0f)*sincf;
+            //std::cout << rval << " " << 0 << std::endl;
+            rval += delta_r;
+            ind++;
+        }
+
+        while (rval < endR) {
+            float qr = qval * rval;
+            if (std::abs(qr) < 1e-10) {
+                sincf = 1.0f;                 // lim x→0 sin(x)/x = 1
+            } else {
+                sincf = sinc(qr);
+            }
+
+            // std::cout << rval << " " << rval*rval*(g_OO_SQ_matched(rval)-1.0f) << std::endl;
+            // std::cout << rval << " " << g_OO_SQ_matched(rval) << std::endl;
+
+            //std::cout << rval << " " << rval*rval*( calculateWaterWeight(rval)-1.0f ) << std::endl;
+            sum += ((ind % 2 == 0) ? 2.0f : 4.0f)*rval*rval*( g_OO_SQ_matched(rval) - 1.0f ) * sincf;
+            //sum += ((ind % 2 == 0) ? 2.0f : 4.0f)*rval*rval*( calculateWaterWeight(rval)-1.0f ) * sincf;
+            rval += delta_r;
+            ind++;
+        }
+
+
+        // for (unsigned int i=0; i<totalN; i++) {// integrate
+        //     float qr = qval*rval;
+        //     sum += calculateWaterWeight(rval)*sinf(qr)/qr;
+        //    //     std::cout << rval << " " << calculateWaterWeight(rval) << std::endl;
+        //
+        //     rval += delta_r;
+        // }
+
+        sum *= delta_r/3.0f;
+        return 1.0f + 4.0f*M_PI*0.03342*sum;
+    }
+
+    /*
+     * returns P(r) distribution for water
+     * r_min is 2.3
+     */
+    float calculateWaterWeight(const float dis) {
+
+        float a_1 = 2.4 ;
+        float r_1 = 2.8 ;
+        float s_1 = 0.5/(0.28*0.28);
+        float a_2 = 0.5 ;
+        float r_2 = 4.5 ;
+        float s_2 = 0.5/(0.55*0.55);
+        float a_3 = 0.2 ;
+        float r_3 = 7.1 ;
+        float s_3 = 0.5/(0.9*0.9) ;
+        // unsigned int num;
+        // float minLimit = 2.49*2.49;
+        // float maxLimit = 10.1*10.1;
+        // P(r) distribution of water => r^2*( g(r)-1 )
+        // maximum value at P(2.8) is 1, normalized to peak value
+        //float value = ((1 + a_1*expf(-std::powf(dis-r_1,2)*s_1) + a_2*expf(-std::powf(dis-r_2,2)*s_2) + a_3*expf(-std::powf(dis-r_3,2)*s_3))*(1-expf(-8*std::powf(dis-2.3,2))) - 1)
+        float g_r = 1 +
+         (a_1*expf(-std::powf(dis-r_1,2)*s_1) +
+         a_2*expf(-std::powf(dis-r_2,2)*s_2) +
+         a_3*expf(-std::powf(dis-r_3,2)*s_3))*
+         (1.0f-expf(-8*std::powf( dis - 2.3, 2)));
+        return std::max(0.0f, g_r);
+    }
+
+    // g_OO(r) plus the long-range correction fitted to match real S(Q) data.
+    float g_OO_SQ_matched(float rval) {
+
+        // SHOULD return 0.0f for values less than cutoff
+        float diff = rval-7.62330643;
+        float g = g_oo(rval) +
+            -0.01531494*expf(diff*diff*-2.0926947568f);
+        return g;
+    }
+
+    float g_oo(const float rval) {
+
+        constexpr double r_min_exclusion = 2.5;
+        if (rval < r_min_exclusion) {
+            return 0.0;
+        }
+
+        float a_1 = 1.6022288043;
+        float r_1 = 2.7992424956 ;
+        float s_1 = -23.8463006847317;
+        float a_2 = -0.5044352646 ;
+        float r_2 = 2.512087913132 ;
+        float s_2 = -82.5754762463057;
+        float a_3 = 2.835902295 ;
+        float r_3 = 4.5106758451 ;
+        float s_3 = -1.16992522513;
+        float a_4 = -2.713383622 ;
+        float r_4 = 4.506014238 ;
+        float s_4 = -0.999784342623;
+        float a_5 = 0.07666115 ;
+        float r_5 = 6.689911741 ;
+        float s_5 = -2.979445942709;
+        float a_6 = -0.881242444 ;
+        float r_6 = 2.287563421 ;
+        float s_6 = -17.1019985978;
+
+        // unsigned int num;
+        // float minLimit = 2.49*2.49;
+        // float maxLimit = 10.1*10.1;
+        // P(r) distribution of water => r^2*( g(r)-1 )
+        // maximum value at P(2.8) is 1, normalized to peak value
+        //float value = ((1 + a_1*expf(-std::powf(dis-r_1,2)*s_1) + a_2*expf(-std::powf(dis-r_2,2)*s_2) + a_3*expf(-std::powf(dis-r_3,2)*s_3))*(1-expf(-8*std::powf(dis-2.3,2))) - 1)
+        float g_r = 1 +
+         a_1*expf(std::powf(rval-r_1,2)*s_1) +
+         a_2*expf(std::powf(rval-r_2,2)*s_2) +
+         a_3*expf(std::powf(rval-r_3,2)*s_3) +
+         a_4*expf(std::powf(rval-r_4,2)*s_4) +
+         a_5*expf(std::powf(rval-r_5,2)*s_5) +
+         a_6*expf(std::powf(rval-r_6,2)*s_6);
+        return g_r;
+        //return std::max(0.0f, g_r);
+    }
+
+    float sinc(float x) {
+        if (std::fabs(x) < 1e-8) {
+            return 1.0f - x * x / 6.0f;
+        }
+        return std::sinf(x) / x;
+    }
+
+
+    float excluded_volume_scattering(float probe_radius=2.1, float q_value = 0.01);
+
+    template <class F>
+    void forNear(const vector3 & p,
+        int nx,
+        int ny,
+        int nz,
+        const std::vector<std::vector<int>> & cells,
+        F&& f) const {
+
+        int cx = std::clamp(static_cast<int>(std::floor(p.x)),0,nx-1);
+        int cy = std::clamp(static_cast<int>(std::floor(p.y)),0,ny-1);
+        int cz = std::clamp(static_cast<int>(std::floor(p.z)),0,nz-1);
+
+        for (int dx=-1;dx<=1;++dx) for (int dy=-1;dy<=1;++dy) for (int dz=-1;dz<=1;++dz) {
+            int nx_=cx+dx, ny_=cy+dy, nz_=cz+dz;
+            if (nx_<0||ny_<0||nz_<0||nx_>=nx||ny_>=ny||nz_>=nz) continue;
+            for (int idx : cells[(nx_*ny+ny_)*nz+nz_]) f(idx);
+        }
+    }
+
+
+    int flat(int nx, int ny, int nz, float cell, const float * pX, const float * pY, const float * pZ, const vector3& lo) const {
+        int cx = std::clamp(static_cast<int>(std::floor((*pX-lo.x)/cell)),0,nx-1);
+        int cy = std::clamp(static_cast<int>(std::floor((*pY -lo.y)/cell)),0,ny-1);
+        int cz = std::clamp(static_cast<int>(std::floor((*pZ-lo.z)/cell)),0,nz-1);
+        return (cx*ny+cy)*nz+cz;
+    }
+
+    // Generate one uniform random point inside the sphere
+    vector3 randomPointInSphere(vector3 & vec,
+        float radius,
+        std::mt19937& rng,
+        std::uniform_real_distribution<float>& uni,
+        std::normal_distribution<float>& normal, float & distance)
+    {
+
+        // 1. Radius (cube-root of uniform → correct volume density)
+        float u = uni(rng);
+        distance = radius * std::cbrtf(u);          // or std::pow(u, 1.0/3.0)
+
+        // 2. Random direction (isotropic)
+        vector3 n_vec(normal(rng), normal(rng), normal(rng));
+
+        float norm = n_vec.sqlength();
+        // Extremely unlikely to be zero, but protect just in case
+        if (norm < 1e-12) {
+            return randomPointInSphere(vec, radius, rng, uni, normal, distance); // retry
+        }
+
+        // 3. Scale + translate
+        return {
+            vec + n_vec.normalize()*distance
+        };
+    }
 };
 
 

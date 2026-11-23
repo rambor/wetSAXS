@@ -64,8 +64,9 @@ TEST_F(AtomisticModelTests, calculatePartials){
     qvalues[3] = 0.1;
     qvalues[4] = 0.41;
 
-    md.calculatePartialAmplitudes(lmax, totalqvalues, qvalues);
-
+    //md.calculatePartialAmplitudes(lmax, totalqvalues, qvalues);
+float val = md.excluded_volume_scattering(2.1, 0.01);
+    std::cout << " MC " << val << std::endl;
     //EXPECT_EQ(5, md.getTotalUniqueAtoms()) << "Total Unique atoms should be " << bsaModel.getTotalUniqueAtoms();
 }
 
@@ -187,6 +188,9 @@ TEST_F(AtomisticModelTests, validatePartials){
         }
 
         float waterASF = functions_WETSAXS::asf(99, qvalue);
+
+        model.setFractionalVolumeAtQ(qvalue);
+
 
         // populate qr values
 

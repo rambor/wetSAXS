@@ -19,8 +19,8 @@
 list(APPEND SOURCES
         SphericalHarmonics.cpp
         SphericalBessels.cpp
-        Waters.cpp
         AtomisticModel.cpp
+        Waters.cpp
         functions_WETSAXS.cpp
         Fit.cpp
         SBESJY.cpp
@@ -32,8 +32,8 @@ list(APPEND SOURCES
 list(APPEND HEADERS
         SphericalHarmonics.h
         SphericalBessels.h
-        Waters.h
         AtomisticModel.h
+        Waters.h
         functions_WETSAXS.h
         Fit.h
         Result.h
@@ -42,9 +42,16 @@ list(APPEND HEADERS
         Aligner.h
         SVD.h
         HCPGridModel.h
+        FCCModel.h
         )
 
-add_library(${CMAKE_PROJECT_NAME}_lib STATIC ${SOURCES} ${HEADERS})
+add_library(${CMAKE_PROJECT_NAME}_lib STATIC ${SOURCES} ${HEADERS}
+        FCCModel.h
+        HCPModel.h
+        Mask.cpp
+        Mask.h
+        water_shell_data.h
+        water_shell.h)
 
 target_link_libraries(${CMAKE_PROJECT_NAME}_lib PUBLIC ${SASTools_LIB})
 

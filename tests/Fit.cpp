@@ -65,7 +65,7 @@ TEST_F(FitTests, calculatePartials){
     waters.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues);
     waters.writeWatersToFile("water_model");
 
-    Fit fitme = Fit(lmax, 500,0.1,1.8f, 120);
+    Fit fitme = Fit(lmax, 500,0.1,1.8f, 0.1, 1.0);
     fitme.search(iofqdata, md, waters);
     fitme.printBestScores();
 
@@ -103,7 +103,7 @@ TEST_F(FitTests, calculatePartialsRNA){
     waters_bent.createSphericalCoordinateOfHydration();
     waters_bent.calculatePartialAmplitudes(lmax, rnaIofQdata.getTotalInWorkingSet(), qvalues);
 
-    Fit fitme = Fit(lmax, 333, 0.1f,1.7, 85);
+    Fit fitme = Fit(lmax, 333, 0.1f,1.7, 0.1, 1.2);
     fitme.search(rnaIofQdata, md, waters);
 
     SASTOOLS_UTILS_H::logger("", "BENT P4P6");
@@ -143,7 +143,7 @@ TEST_F(FitTests, calculatePartialsAB){
     watersB.createSphericalCoordinateOfHydration();
     watersB.calculatePartialAmplitudes(lmax, data.getTotalInWorkingSet(), qvalues);
 
-    Fit fitme = Fit(lmax, 333,0.1,1.7f, 85);
+    Fit fitme = Fit(lmax, 333,0.1,1.7f, 0.1, 1.2);
 //    fitme.search(data, mdA, waters);
     fitme.chiFreeSearch(7, data, mdA, waters);
 
@@ -186,7 +186,7 @@ TEST_F(FitTests, calculatePartialsDNA){
     watersB.calculatePartialAmplitudes(lmax, dnaIofQdata.getTotalInWorkingSet(), qvalues);
 
 
-    Fit fitme = Fit(lmax, 300, 0.1,1.7, 120);
+    Fit fitme = Fit(lmax, 300, 0.1,1.7, 0.1, 1.2);
     SASTOOLS_UTILS_H::logger("", "Fitting DNA helix");
     fitme.search(dnaIofQdata, md, waters);
 
@@ -219,7 +219,7 @@ TEST_F(FitTests, chiFreeMisFitTest){
     waters.createSphericalCoordinateOfHydration();
     waters.calculatePartialAmplitudes(lmax, dnaIofQdata.getTotalInWorkingSet(), qvalues);
 
-    Fit fitme = Fit(lmax, 300, 0.1,1.7, 120);
+    Fit fitme = Fit(lmax, 300, 0.1,1.7, 0.1, 1.2);
     SASTOOLS_UTILS_H::logger("", "Fitting RNA helix");
     fitme.chiFreeSearch(17, dnaIofQdata, md, waters);
 
@@ -249,7 +249,7 @@ TEST_F(FitTests, chiFreeTest){
     waters.createSphericalCoordinateOfHydration();
     waters.calculatePartialAmplitudes(lmax, dnaIofQdata.getTotalInWorkingSet(), qvalues);
 
-    Fit fitme = Fit(lmax, 300, 0.1, 1.7, 120);
+    Fit fitme = Fit(lmax, 300, 0.1, 1.7, 0.1, 1.2);
     SASTOOLS_UTILS_H::logger("", "Fitting DNA helix");
     fitme.chiFreeSearch(7, dnaIofQdata, md, waters);
 
@@ -271,6 +271,7 @@ TEST_F(FitTests, chiFreeTest){
     // recalculate Partials for the initial models
     waters.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
     md.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
+waters.translateAndWriteWatersToFile("waters", mdT.getPDBModel().getCenteringVector());
 
     auto mdPartialR = md.getModelPartialsReal();        // updated model
     auto mdTPartialR = mdT.getModelPartialsReal();      // new model
@@ -324,6 +325,50 @@ TEST_F(FitTests, chiFreeTest){
     // assemble intensities for each model
 }
 
+
+TEST_F(FitTests, cxTestSearchWithMaskBSA) {
+
+    AtomisticModel md = AtomisticModel(fixture(bsa.pdb), false, false);
+
+    iofqdata.extractData(); // assume dmax is not set as data from other facilities will not be compatible with Scatter format
+    iofqdata.setDmax(md.getDmax());
+    iofqdata.makeWorkingSet(3);
+
+    // need q-values and lmax for the fit
+    std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
+    int totalQvalues = qvalues.size();
+
+    unsigned int lmax = (unsigned int)((iofqdata.getQmax()*md.getDmax())/SIMDE_MATH_PI) + 1;
+    SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
+    SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes");
+
+    // create water model
+    Waters waters = Waters();
+    waters.hydrateAtomisticModel(md); // add waters to PDB
+    waters.createSphericalCoordinateOfHydration();
+    waters.writeWatersToFile("water_model");
+
+    md.addWatersToAtomicModel(waters);
+    // only calculate the entire model which includes waters
+    md.calculatePartialAmplitudes(lmax, totalQvalues, qvalues);
+
+    SASTOOLS_UTILS_H::logger("", "Creating Mask");
+    Mask mask = Mask();
+
+    mask.readInWaterModel(waters);
+    mask.createParticleMask(md);
+
+    mask.calculateMaskCrossTerm(totalQvalues, qvalues, md);
+
+    Fit fitme = Fit(lmax, 133,0.01,1.8f, 0.1, 1.2);
+    SASTOOLS_UTILS_H::logger("", "Fitting BSA using MASK");
+    fitme.searchWithMask(iofqdata, md, waters, mask);
+}
+
+
+
+
+
 /*
  * u52
  */
@@ -344,7 +389,6 @@ TEST_F(FitTests, cxTestsBSA){
     SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
     SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes");
 
-    md.calculatePartialAmplitudes(lmax, totalQvalues, qvalues);
 
     // create water model
     Waters waters = Waters();
@@ -353,7 +397,10 @@ TEST_F(FitTests, cxTestsBSA){
     waters.calculatePartialAmplitudes(lmax, totalQvalues, qvalues);
     waters.writeWatersToFile("water_model");
 
-    Fit fitme = Fit(lmax, 133,0.4,1.8f, 87);
+    md.addWatersToAtomicModel(waters);
+    md.calculatePartialAmplitudes(lmax, totalQvalues, qvalues);
+
+    Fit fitme = Fit(lmax, 133,0.01,1.8f, 0.1, 1.2);
 
     SASTOOLS_UTILS_H::logger("", "Fitting BSA");
 
@@ -464,8 +511,39 @@ TEST_F(FitTests, cxTestsDNA){
     waters.createSphericalCoordinateOfHydration();
     waters.calculatePartialAmplitudes(lmax, dnaIofQdata.getTotal(), qvalues);
 
-    Fit fitme = Fit(lmax, 300, 0.1,1.7, 120);
+    Fit fitme = Fit(lmax, 300, 0.1,1.7, 0.1, 1.2);
     SASTOOLS_UTILS_H::logger("", "Fitting DNA helix");
+
+}
+
+TEST_F(FitTests, cxTestsGI){
+
+    AtomisticModel md = AtomisticModel(fixture(GI.pdb), false, false);
+
+    IofQData iofQdata = IofQData(fixture(GI_fitme.dat), false);
+    iofQdata.extractData(); // assume dmax is not set as data from other facilities will not be compatible with Scatter format
+    iofQdata.setDmax(md.getDmax());
+    iofQdata.makeWorkingSet(4);
+
+    // need q-values and lmax for the fit
+    //std::vector<float> qvalues = dnaIofQdata.getWorkingSetQvalues();
+    std::vector<float> qvalues = iofQdata.getQvalues();
+
+    unsigned int lmax = (unsigned int)((iofQdata.getQmax()*md.getDmax())/SIMDE_MATH_PI) + 1;
+    SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
+    SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes");
+    md.calculatePartialAmplitudes(lmax, iofQdata.getTotal(), qvalues);
+
+    // create water model
+    Waters waters = Waters();
+
+    waters.hydrateAtomisticModel(md); // add waters to PDB
+
+    waters.createSphericalCoordinateOfHydration();
+    waters.calculatePartialAmplitudes(lmax, iofQdata.getTotal(), qvalues);
+
+    Fit fitme = Fit(lmax, 300, 0.1,1.7, 0.1, 1.2);
+
 
 }
 

@@ -221,13 +221,17 @@ TEST_F(EnsembleTests, SingularValueDeterminationTest){
             waters.createSphericalCoordinateOfHydration();
             waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
+
             std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
             // assemble the partials and
-            ens.assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
+            ens.assemblePartials(lmax, model, waters, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
+
 
             for(unsigned int q=0; q<totalInWorkingSet; q++){
                 exam(q, cnt) = aPs[q];
@@ -318,12 +322,15 @@ TEST_F(EnsembleTests, CEDecompositionTest){
             waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
             std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
             // assemble the partials and
-            ens.assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
+            ens.assemblePartials(lmax, model, waters, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
+
 
             // combine and add noise
             for(unsigned int q=0; q<totalInWorkingSet; q++){
@@ -418,12 +425,15 @@ TEST_F(EnsembleTests, SVDLinearDecompositionWithNoiseTest){
             waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
             std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
             // assemble the partials and
-            ens.assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
+            ens.assemblePartials(lmax, model, waters, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
+
 
             // combine and add noise
             float * aP;
@@ -575,12 +585,15 @@ TEST_F(EnsembleTests, SVDLinearDecompositionTest){
             waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
             std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
             // assemble the partials and
-            ens.assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
+            ens.assemblePartials(lmax, model, waters, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
+
 
             // combine and add noise
             for(unsigned int q=0; q<totalInWorkingSet; q++){
@@ -701,12 +714,15 @@ TEST_F(EnsembleTests, NNLSLinearDecompositionTest){
             waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
             std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
             // assemble the partials and
-            ens.assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
+            ens.assemblePartials(lmax, model, waters, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
+
 
             // combine and add noise
             for(unsigned int q=0; q<totalInWorkingSet; q++){
@@ -830,12 +846,15 @@ TEST_F(EnsembleTests, NNLSLinearDecompositionWithNoiseTest){
             waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
 
             std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
             // assemble the partials and
-            ens.assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
+            ens.assemblePartials(lmax, model, waters, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
+
 
             // combine and add noise
             for(unsigned int q=0; q<totalInWorkingSet; q++){
@@ -955,9 +974,11 @@ TEST_F(EnsembleTests, SVDTest){
 
 TEST_F(EnsembleTests, CombinationTestsExceptionTest){
 
-    float bfactor = 7.9;
+    float co = 1.1;
     float cx = 0.817;
-    const float inv16Pi2 = 1.0/(16.0*M_PI_2);
+    float co2 = co*co;
+    float cx2 = cx*cx;
+    float cocx = co*cx;
 
     std::vector<std::string> files;
 
@@ -1003,25 +1024,26 @@ TEST_F(EnsembleTests, CombinationTestsExceptionTest){
             waters.hydrateAtomisticModel(model); // add waters to PDB
             waters.createSphericalCoordinateOfHydration();
             waters.calculatePartialAmplitudes(lmax, totalInWorkingSet, qvalues);
-
             std::vector<float> aPs = std::vector<float>(totalInWorkingSet);
-            std::vector<float> aPWs = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aWs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aCs = std::vector<float>(totalInWorkingSet);
             std::vector<float> aXW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPW_cross_term = std::vector<float>(totalInWorkingSet);
+            std::vector<float> aPX_cross_term = std::vector<float>(totalInWorkingSet);
 
             // assemble the partials and
-            ens.assemblePartials(lmax, model, waters, totalInWorkingSet, aPs, aPWs, aCs, aXW_cross_term);
+            ens.assemblePartials(lmax, model, waters, aPs, aWs, aCs, aPW_cross_term, aPX_cross_term, aXW_cross_term, totalInWorkingSet);
 
-            // combine and add noise
+            float * pAps = aPs.data();
+            float * pWs = aWs.data();
+            float * pCs = aCs.data();
+            float * pXW_cross_term = aXW_cross_term.data();
+            float * pPW_cross_term = aPW_cross_term.data();
+            float * pPX_cross_term = aPX_cross_term.data();
+
+            // combine
             for(unsigned int q=0; q<totalInWorkingSet; q++){
-                float q_val = qvalues[q]; // get qvalue to calculate b-factor
-                float exp_term = expf(-(q_val*q_val)*bfactor*inv16Pi2)*cx;
-                // from assemblePartials in Ensemble
-                //        pAP[q] = a_p_norm;
-                //        pAc[q] = a_x_norm; // excluded volume
-                //        pApw[q] = a_p_norm + a_w_norm + 2.0f*(aPWR_term + aPWI_term); // hydratedParticle term
-                //        pAXW_cross_term[q] = -2.0f*(aXWR_term + aXWI_term + aPXR_term + aPXI_term); // invert phase
-                models(q, mdl_cnt) = aPWs[q] + aCs[q]*exp_term*exp_term + exp_term*aXW_cross_term[q];
+                models(q, mdl_cnt)  = pAps[q] + pWs[q]*co2 + co*pPW_cross_term[q] + cocx * pXW_cross_term[q] + cx * pPX_cross_term[q] + pCs[q]*cx2;
             }
 
             mdl_cnt++;
