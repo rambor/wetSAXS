@@ -7,6 +7,9 @@
 #include "Fit.h"
 #include "Ensemble.h"
 #include "Aligner.h"
+#include "BufferModel.h"
+#include "IonCloud.h"
+#include <memory>
 
 namespace po = boost::program_options;
 
@@ -58,18 +61,33 @@ int main(int argc, const char *const *argv) {
     std::cout << "    ADE and GUA are ambiguous and can specify either DNA or RNA           " << std::endl;
     std::cout << "********************                                      *********************" << std::endl;
 
-    float cxlow = 0.01, cxhi = 0.9, dmax=0.0f, qmin = 0.001, qmax = 0.41;
-    float cx = 1.108, colow = 0.3, cohi = 1.21, co = 0.33;
+    float cxlow = 0.90, cxhi = 1.10, dmax=0.0f, qmin = 0.001, qmax = 0.41;
+    float cx = 1.0, colow = 0.5, cohi = 2.0, co = 1.09;
 
     bool convertToAngstrom = false, forceRNA = false, keepWaters = false, noChiFree = false, singleFit = false,
-    writeWaters = false, invacuo=false, mixture=false, ensemble=false, background=false, dmaxFilter = false,
+    writeWaters = false, invacuo=false, mixture=false, ensemble=false, background=false, bufferScaled=false, dmaxFilter = false,
     align_and_map = false;
 
     int divisions = 101;
 
     int ns = 237, rounds = 5;
 
-    std::string datFile, atomFile, listOfFiles;
+    std::string datFile, atomFile, listOfFiles, bufferFile;
+    bool noIonCloud = false;
+    IonCloudSettings ionSettings;
+    std::unique_ptr<BufferModel> bufferModel;
+
+    // counterion atmosphere for one model: needs the buffer (ionic strength, pH, ion contrasts)
+    auto makeIonCloud = [&](AtomisticModel & model) -> std::unique_ptr<IonCloud> {
+        if (!bufferModel || noIonCloud || bufferModel->ionicStrength() <= 0.0) return nullptr;
+        auto cloud = std::make_unique<IonCloud>(model.getPDBModel(), *bufferModel, ionSettings);
+        for (const auto & line : cloud->getReport()) SASTOOLS_UTILS_H::logger("", line);
+        model.attachIonCloud(cloud.get());
+        if (writeWaters)
+            cloud->writePseudoAtoms(model.getPDBModel().getFileStemName() + "_ion_cloud.pdb", model.getPDBModel().getCenteringVector());
+        return cloud;
+    };
+
     std::vector<std::string> filenames;
 
     std::string descText = "\n Usage: wetSAXS myPDBFile.pdb";
@@ -80,13 +98,19 @@ int main(int argc, const char *const *argv) {
             ("help,h", "help message")
             ("dat,i", po::value<std::string>(&datFile))
             ("toNM", po::bool_switch(&convertToAngstrom), "Reduce bead radius defining the lattice")
-            ("contrast,x", po::value<float>(&cx), "Excluded volume contrast adjustment (default: 1.108)")
-            ("occupancy,o", po::value<float>(&co), "Occupancy adjustment (default: 0.33)")
+            ("buffer,b", po::value<std::string>(&bufferFile), "Buffer file (components, concentrations, temperature; default 25 C): sets c_x and fixes it")
+            ("noIonCloud", po::bool_switch(&noIonCloud), "Do not model the counterion atmosphere (it is modelled whenever --buffer is given)")
+            ("ionApproach", po::value<float>(&ionSettings.closestApproach), "Ion cloud: distance of closest approach a, A; pseudo-atoms at a + Debye length (default: 3.0)")
+            ("ionWidth", po::value<float>(&ionSettings.width), "Ion cloud: Gaussian width of each pseudo-atom, A (default: 2.5)")
+            ("counterFraction", po::value<float>(&ionSettings.nucleicFraction), "Ion cloud: counterion share of the neutralisation of phosphates (default: 0.71)")
+            ("contrast,x", po::value<float>(&cx), "Solvent density relative to 0.334 e/A^3, scales the excluded volume (default: 1.0)")
+            ("occupancy,o", po::value<float>(&co), "Hydration-site density relative to bulk; shell contrast is co - cx (default: 1.09)")
             (",g", po::bool_switch(&background), "Include constant background in fit (default: false)")
-            ("cxlo", po::value<float>(&cxlow),"lower bound for excluded volume adjustment")
-            ("cxhi", po::value<float>(&cxhi),"upper bound for excluded volume adjustment")
-            ("colo", po::value<float>(&colow),"lower bound for occupancy adjustment")
-            ("cohi", po::value<float>(&cohi),"upper bound for occupancy adjustment")
+            ("bufferScaled", po::bool_switch(&bufferScaled), "Buffer was scaled by (1 - volume fraction) before subtraction (default: false)")
+            ("cxlo", po::value<float>(&cxlow),"lower bound for cx (default: 0.90)")
+            ("cxhi", po::value<float>(&cxhi),"upper bound for cx (default: 1.10)")
+            ("colo", po::value<float>(&colow),"lower bound for co (default: 0.5)")
+            ("cohi", po::value<float>(&cohi),"upper bound for co (default: 2.0)")
 
             ("divisions,v", po::value<int>(&divisions),"number of divisions between lower and upper bounds for searching (default: 101)")
 
@@ -148,6 +172,29 @@ int main(int argc, const char *const *argv) {
         }
 
         po::notify(vm);
+
+        // buffer composition fixes c_x: only c_o (hydration excess c_o - c_x) is searched
+        if (vm.count("buffer")){
+            try {
+                bufferModel = std::make_unique<BufferModel>(bufferFile);
+                const BufferModel & buffer = *bufferModel;
+                for (const auto & line : buffer.getReport()) std::cout << "  " << line << std::endl;
+                if (vm.count("contrast")){
+                    std::cerr << "ERROR: give either -x (contrast) or --buffer, not both" << std::endl;
+                    return ERROR_IN_COMMAND_LINE;
+                }
+                if (vm.count("cxlo") || vm.count("cxhi")){
+                    std::cout << "  WARNING: --cxlo/--cxhi ignored, c_x fixed from buffer file" << std::endl;
+                }
+                cx = (float)buffer.getCx();
+                cxlow = cx;
+                cxhi = cx;
+            } catch (const std::exception & e){
+                std::cerr << "ERROR: " << e.what() << std::endl;
+                return ERROR_IN_COMMAND_LINE;
+            }
+        }
+
 
          if (vm["toNM"].as<bool>()){
              convertToAngstrom = true;
@@ -486,6 +533,7 @@ int main(int argc, const char *const *argv) {
 
                 SASTOOLS_UTILS_H::logger("FITTING MODEL FILE",filename);
                 AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
+                std::unique_ptr<IonCloud> ionCloud = makeIonCloud(model);
 
                 // if dmax is not specified, must retrieve from PDB
                 // dmax should really be based on the empirical value not model taken from IofQfile
@@ -582,6 +630,7 @@ int main(int argc, const char *const *argv) {
 
                     try{
                         AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
+                        std::unique_ptr<IonCloud> ionCloud = makeIonCloud(model);
 
                         if (model.getPDBModel().getTotalResidues() < 1){
                             throw (filename);
@@ -605,7 +654,20 @@ int main(int argc, const char *const *argv) {
                         waters.hydrateAtomisticModel(model); // add waters to PDB
                         waters.createSphericalCoordinateOfHydration();
 
+                        // l needed is ~ q*r for the outermost atom (r measured from the centre), not the Shannon number
+                        const unsigned int modelLmax = (unsigned int)std::ceil(qmax*model.getPDBModel().getSMax()) + 7;
+                        SASTOOLS_UTILS_H::logger("LMAX (model)", std::to_string(modelLmax));
+                        fitting.setLmax(modelLmax);
+
+                        // solvent fluctuations of the bulk water displaced by protein + hydration sites
+                        SolventFluctuation solvent;
+                        solvent.buildExcludedRegion(model, waters);
+                        solvent.computeSurfaceDeficit();
+                        SASTOOLS_UTILS_H::logger("Excluded volume (SES, A^3)", std::to_string((int)solvent.getExcludedVolume()));
+                        fitting.setSolventFluctuation(&solvent, bufferScaled);
+
                         fitting.chiFreeSearch(rounds, iofqdata, model, waters);
+                        fitting.setSolventFluctuation(nullptr, bufferScaled); // solvent goes out of scope
 
                         if (writeWaters){
                             std::string name = model.getPDBModel().getFileStemName();
@@ -638,6 +700,7 @@ int main(int argc, const char *const *argv) {
                     try{
 
                         AtomisticModel model = AtomisticModel(filename, forceRNA, keepWaters);
+                        std::unique_ptr<IonCloud> ionCloud = makeIonCloud(model);
 
                         if (model.getPDBModel().getTotalResidues() < 1){
                             throw (filename);
@@ -646,13 +709,22 @@ int main(int argc, const char *const *argv) {
                         SASTOOLS_UTILS_H::logger("Model DMAX", std::to_string(model.getDmax()));
                         SASTOOLS_UTILS_H::logger("", "Calculating Amplitudes MODEL");
 
-                        model.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues);
+                        // l needed is ~ q*r for the outermost atom (r measured from the centre), not the Shannon number
+                        const unsigned int modelLmax = (unsigned int)std::ceil(qmax*model.getPDBModel().getSMax()) + 7;
+                        SASTOOLS_UTILS_H::logger("LMAX (model)", std::to_string(modelLmax));
+
+                        model.calculatePartialAmplitudes(modelLmax, iofqdata.getTotalInWorkingSet(), qvalues);
 
                         // create water model
                         Waters waters = Waters();
                         waters.hydrateAtomisticModel(model); // add waters to PDB
                         waters.createSphericalCoordinateOfHydration();
-                        waters.calculatePartialAmplitudes(lmax, iofqdata.getTotalInWorkingSet(), qvalues);
+                        waters.calculatePartialAmplitudes(modelLmax, iofqdata.getTotalInWorkingSet(), qvalues);
+
+                        SolventFluctuation solvent;
+                        solvent.buildExcludedRegion(model, waters);
+                        solvent.computeSurfaceDeficit();
+                        SASTOOLS_UTILS_H::logger("Excluded volume (SES, A^3)", std::to_string((int)solvent.getExcludedVolume()));
 
                         if (writeWaters){
                             std::string name = model.getPDBModel().getFileStemName();
@@ -662,7 +734,8 @@ int main(int argc, const char *const *argv) {
 
                         if (!vm.count("contrast")){ // no Chi-free fitting single working set only
 
-                            Fit fitting = Fit(lmax, divisions, cxlow, cxhi, colow, cohi);
+                            Fit fitting = Fit(modelLmax, divisions, cxlow, cxhi, colow, cohi);
+                            fitting.setSolventFluctuation(&solvent, bufferScaled);
                             SASTOOLS_UTILS_H::logger("", "Grid Search of B-factor and Cx");
                             fitting.search(iofqdata, model, waters);
                             // append a summary file with the best fitted parameters so a user could
@@ -670,7 +743,8 @@ int main(int argc, const char *const *argv) {
 
                         } else {
 
-                            Fit fitting = Fit(lmax);
+                            Fit fitting = Fit(modelLmax);
+                            fitting.setSolventFluctuation(&solvent, bufferScaled);
 
                             if (vm.count("contrast")) { // fit using fixed contrast and occupancy
 
@@ -678,8 +752,8 @@ int main(int argc, const char *const *argv) {
                                 iofqdata.setAllDataToWorkingSet();
                                 std::vector<float> qvalues = iofqdata.getWorkingSetQvalues();
                                 // recalculate Partials for the initial models
-                                waters.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
-                                model.calculatePartialAmplitudes(lmax, qvalues.size(), qvalues, true);
+                                waters.calculatePartialAmplitudes(modelLmax, qvalues.size(), qvalues, true);
+                                model.calculatePartialAmplitudes(modelLmax, qvalues.size(), qvalues, true);
 
                                 fitting.fitFixedCoAndCx(iofqdata, model, waters, co, cx);
                                 // (qvalues, iofqdata.getFilename(), model);

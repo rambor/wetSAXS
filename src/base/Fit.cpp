@@ -43,6 +43,21 @@ Fit::Fit(unsigned int lmax, unsigned int division, float lowcx, float highcx, fl
 }
 
 
+/*
+ * Delta I_fl(q) for the given q values, converted to the units of sum_lm |A_lm|^2:
+ * the orientational average is <|A|^2> = 4 pi sum_lm |A_lm|^2 with orthonormal Y_lm.
+ * Zero if no SolventFluctuation has been set.
+ */
+void Fit::fillSolventFluctuation(const std::vector<float> & qvalues){
+    fluct.assign(qvalues.size(), 0.0f);
+    if (solvent == nullptr) return;
+    const float inv4pi = 1.0f/(4.0f*(float)M_PI);
+    for(size_t q = 0; q < qvalues.size(); q++){
+        fluct[q] = solvent->deltaI(qvalues[q], bufferScaled)*inv4pi;
+    }
+}
+
+
 void Fit::assemblePartials(AtomisticModel &model,
                            Waters &waterModel,
                            std::vector<float> & norm_Pamps,
@@ -60,6 +75,8 @@ void Fit::assemblePartials(AtomisticModel &model,
 
     const float * wlmR = waterModel.getModelPartialsReal();
     const float * wlmI = waterModel.getModelPartialsImag();
+    const float * w0lmR = waterModel.getDisplacedPartialsReal(); // bulk water displaced by the sites (A_w0)
+    const float * w0lmI = waterModel.getDisplacedPartialsImag();
 
     float * pAp = norm_Pamps.data();
     float * pAw = norm_Wamps.data();
@@ -107,9 +124,9 @@ void Fit::assemblePartials(AtomisticModel &model,
             a_p_norm +=  *pAlmPR * *pAlmPR + *pAlmPI * *pAlmPI;     // sum of the A*A_transpose
             a_w_norm +=  *pWlmR * *pWlmR + *pWlmI * *pWlmI;         // water layer
 
-            // add hydration layer waters to the excluded volume
-            x_w_r = (*pXlmR + *pWlmR);
-            x_w_i = (*pXlmI + *pWlmI);
+            // excluded volume A_xw0 = A_x + A_w0 (bulk water displaced by protein and hydration sites)
+            x_w_r = (*pXlmR + w0lmR[index]);
+            x_w_i = (*pXlmI + w0lmI[index]);
 
             a_x_norm +=  x_w_r*x_w_r + x_w_i*x_w_i; // excluded volume, includes the water that form the scattered object
 
@@ -219,6 +236,8 @@ void Fit::assemblePartials(AtomisticModel &model,
 
     const float * wlmR = waterModel.getModelPartialsReal();
     const float * wlmI = waterModel.getModelPartialsImag();
+    const float * w0lmR = waterModel.getDisplacedPartialsReal(); // bulk water displaced by the sites (A_w0)
+    const float * w0lmI = waterModel.getDisplacedPartialsImag();
 
     float * pAp = norm_aPs.data();
     float * pAw = norm_aWs.data();
@@ -272,8 +291,9 @@ void Fit::assemblePartials(AtomisticModel &model,
             a_p_norm +=  *pAlmPR * *pAlmPR + *pAlmPI * *pAlmPI;     // particle scattering
             a_w_norm +=  *pWlmR * *pWlmR + *pWlmI * *pWlmI;         // water layer
 
-            x_w_r = *pXlmR + *pWlmR; // combining hydrating waters into the excluded volume
-            x_w_i = *pXlmI + *pWlmI;
+            // excluded volume A_xw0 = A_x + A_w0 (bulk water displaced by protein and hydration sites)
+            x_w_r = *pXlmR + w0lmR[index];
+            x_w_i = *pXlmI + w0lmI[index];
 
             a_x_norm +=  x_w_r*x_w_r + x_w_i*x_w_i; // excluded volume, includes the water that form the scattered object
 
@@ -471,6 +491,7 @@ void Fit::setUpForFitting(IofQData &iofqdata, AtomisticModel &model, Waters &wat
 
 
     assemblePartials(model, waterModel, totalInWorkingSet);
+    fillSolventFluctuation(iofqdata.getWorkingSetQvalues());
 
     // populate experimental observation information
     //std::vector<Datum> & workingSet = const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet());
@@ -616,20 +637,23 @@ void Fit::search(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel) 
 
     // setting match point requires total waters in hydration model
     model.setMatchPointScale(waterModel.getTotalWaters());
-    float contrastMatchScale = model.getMatchPoint(); // scale factor required to match forward scattering as if water
+    const float contrastMatchScale = 1.0f; // A_x is in electrons: c_x is relative to 0.334 e/A^3, no match-point scaling // scale factor required to match forward scattering as if water
     SASTOOLS_UTILS_H::logger("Match Point", formatNumber(model.getMatchPoint(),3));
 
     float inv_n_s = 1.0f/(float)(totalInWorkingSet-2);
     float cx;
-    float c_occ = 0.0;//low_c_occ;
-    float incr_occ = 0.12;
+    // c_o grid over [low_c_occ, high_c_occ] with the same number of divisions as c_x
+    const float incr_occ = (high_c_occ - low_c_occ)/(float)total_cx;
+    float c_occ = low_c_occ;
 
-    //while (c_occ < high_c_occ) {
-    while (c_occ < 10.01) {
+    // c_x fixed (e.g. from a buffer file, cxlo == cxhi): evaluate it once per c_o, not total_cx times
+    const int totalCxSteps = (deltaCX > 0.0f) ? (int)total_cx : 1;
+
+    for (unsigned int incr_co = 0; incr_co <= total_cx; incr_co++) {
 
         cx =  lowcx*contrastMatchScale;
 
-        for(int incr_cx = 0; incr_cx < total_cx; incr_cx++){
+        for(int incr_cx = 0; incr_cx < totalCxSteps; incr_cx++){
 
                 scalar = calculateIofQfromModelWithVariances(totalInWorkingSet,
                                              pQ,
@@ -706,8 +730,9 @@ void Fit::printBestScores(){
     SASTOOLS_UTILS_H::logger("chi-squared", formatNumber(bestChi,3));
     SASTOOLS_UTILS_H::logger("Durbin-Watson", formatNumber(bestDW,3));
 //    SASTOOLS_UTILS_H::logger("B-factor", formatNumber(bestBfactor,1));
-    SASTOOLS_UTILS_H::logger("contrast(c_x)", formatNumber(bestCx,2));
-    SASTOOLS_UTILS_H::logger("occupancy(c_o)", formatNumber(bestOcc,2));
+    SASTOOLS_UTILS_H::logger("contrast(c_x)", formatNumber(bestCx,4));
+    SASTOOLS_UTILS_H::logger("occupancy(c_o)", formatNumber(bestOcc,3));
+    SASTOOLS_UTILS_H::logger("hydration excess (c_o - c_x)", formatNumber(bestOcc - bestCx,3));
 }
 
 
@@ -752,7 +777,7 @@ void Fit::searchCOFactor(IofQData &iofqdata, AtomisticModel &model, Waters &wate
 
     // setting match point requires total waters in hydration model
     model.setMatchPointScale(waterModel.getTotalWaters());
-    float contrastMatchScale = model.getMatchPoint();
+    const float contrastMatchScale = 1.0f; // A_x is in electrons: c_x is relative to 0.334 e/A^3, no match-point scaling
     SASTOOLS_UTILS_H::logger("Match Point", formatNumber(model.getMatchPoint(),3));
 
     float cx =  fixedCx*contrastMatchScale;
@@ -842,7 +867,7 @@ void Fit::searchCX(IofQData &iofqdata, AtomisticModel &model, Waters &waterModel
 
     // setting match point requires total waters in hydration model
     model.setMatchPointScale(waterModel.getTotalWaters());
-    float contrastMatchScale = model.getMatchPoint();
+    const float contrastMatchScale = 1.0f; // A_x is in electrons: c_x is relative to 0.334 e/A^3, no match-point scaling
     SASTOOLS_UTILS_H::logger("Match Point", formatNumber(model.getMatchPoint(),3));
 
     float inv_n_s = 1.0f/(float)(totalInWorkingSet-2);
@@ -1108,6 +1133,13 @@ void Fit::writeBestModelToFile(
 /*
  * Calculate SAXS profile
  */
+/*
+ * I(q) = < | A_p + c_o A_w - c_x A_xw0 |^2 > + Delta I_fl(q)
+ *      = |A_p|^2 + c_o^2 |A_w|^2 + c_x^2 |A_xw0|^2
+ *        + c_o 2Re(A_p A_w*) - c_x 2Re(A_p A_xw0*) - c_o c_x 2Re(A_w A_xw0*)
+ * pAPX_cross_term and pAXW_cross_term already carry the minus sign (assemblePartials).
+ * Same expression as calculateIofQfromModel (used by simulate). Returns the least-squares scale.
+ */
 float Fit::calculateIofQfromModelWithVariances(unsigned int totalInWorkingSet,
                                              const float * pQ,
                                              const float * pAp,
@@ -1119,32 +1151,19 @@ float Fit::calculateIofQfromModelWithVariances(unsigned int totalInWorkingSet,
                                              float cx,
                                              float co,
                                              float * pIcalc) {
-    float i_of_q;
-    const float * q_val;
 
-    float c_obs_calc = 0.0f;
-    float calc_var = 0.0f;
+    const float co2 = co*co;
+    const float cx2 = cx*cx;
+    const float cocx = co*cx;
 
-    float cob2, cob;
-    float co2 = co*co;
-    float cx2 = cx*cx;
-    float cocx = co*cx;
-    float bf = 6;
-    float inv = 1.0/(M_PI*M_PI*8);
+    double c_obs_calc = 0.0;
+    double calc_var = 0.0;
 
     for(unsigned int q =0; q < totalInWorkingSet; q++) {
-        q_val = &pQ[q]; // get qvalue to calculate b-factor
-        cob2 = expf(-(*q_val * *q_val)*bf*inv);
-        cob = expf(-(*q_val * *q_val)*bf*inv16Pi2);
-        //pApw[q] = a_p_norm + a_w_norm*occ*occ + 2.0f*occ*(aPWR_term + aPWI_term); // hydratedParticle
-         i_of_q = pAp[q] + co*pAPW_cross_term[q] + pAw[q]*co2
-         + cocx * pAXW_cross_term[q]*cob + cx * pAPX_cross_term[q]*cob - 2*pAc[q]*cx2*cob2;
 
-
-        // aPXR_term += x_w_r * (*pAlmPR + occ* *pWlmR); // split into two -> Wlm is modified occupancy (co)
-        // aPXI_term += x_w_i * (*pAlmPI + occ* *pWlmI); // x_w is excluded volume and modified by cx (contrast)
-        // pAPX_cross_term => x_w_r * *pAlmPR + x_w_i * *pAlmPI
-        // pAXW_cross_term => x_w_r * *pAlmWR + x_w_i * *pWlmPI
+        const float i_of_q = pAp[q] + co2*pAw[q] + cx2*pAc[q]
+                           + co*pAPW_cross_term[q] + cx*pAPX_cross_term[q] + cocx*pAXW_cross_term[q]
+                           + fluct[q];   // solvent fluctuations (zero if not set)
 
         c_obs_calc += i_of_q*i_obs_over_variance[q];
         calc_var += i_of_q*i_of_q*inv_variance[q];
@@ -1152,7 +1171,7 @@ float Fit::calculateIofQfromModelWithVariances(unsigned int totalInWorkingSet,
         pIcalc[q] = i_of_q;
     }
 
-    return c_obs_calc/calc_var;
+    return (float)(c_obs_calc/calc_var);
 }
 
 /*
@@ -1350,7 +1369,8 @@ void Fit::calculateIofQfromModel(unsigned int totalInWorkingSet,
         //pApw[q] = a_p_norm + a_w_norm*occ*occ + 2.0f*occ*(aPWR_term + aPWI_term); // hydratedParticle
 
         pIcalc[q] = pAp[q] + pAw[q]*co2 + co*pAPW_cross_term[q]
-            + cocx * pAXW_cross_term[q] + cx * pAPX_cross_term[q] + pAc[q]*cx2;
+            + cocx * pAXW_cross_term[q] + cx * pAPX_cross_term[q] + pAc[q]*cx2
+            + (q < fluct.size() ? fluct[q] : 0.0f);   // solvent fluctuations (zero if not set)
     }
 
 
@@ -1382,6 +1402,8 @@ void Fit::simulate(float cx,
                      aPX_cross_term,
                      aXW_cross_term,
                      totalInWorkingSet);
+
+    fillSolventFluctuation(qvalues);
 
     float * pAp = norm_aPs.data();
     float * pAc = norm_aCs.data();

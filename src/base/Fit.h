@@ -29,6 +29,7 @@
 #include "Waters.h"
 #include "Result.h"
 #include "Mask.h"
+#include "SolventFluctuation.h"
 
 class Fit {
 
@@ -44,6 +45,12 @@ class Fit {
     const float inv16Pi2 = 1.0/(16.0*M_PI_2);
 
     std::vector<unsigned int> partialRows; // working-set row -> partials row (empty: identical)
+
+    // solvent-fluctuation term, added to I(q) as an intensity (units of sum_lm |A_lm|^2)
+    const SolventFluctuation * solvent = nullptr;
+    bool bufferScaled = false;
+    std::vector<float> fluct;
+    void fillSolventFluctuation(const std::vector<float> & qvalues);
     std::vector<float> norm_aPs;
     std::vector<float> norm_aWs;
     std::vector<float> norm_aCs;
@@ -60,6 +67,9 @@ class Fit {
 
 public:
     Fit(unsigned int lmax);
+    void setLmax(unsigned int value){ lmax = value; } // per model: ceil(qmax*smax) + 7
+    // bufferScaled: experimental buffer was scaled by (1 - volume fraction) before subtraction
+    void setSolventFluctuation(const SolventFluctuation * sf, bool scaledBuffer){ solvent = sf; bufferScaled = scaledBuffer; }
     Fit(unsigned int lmax, unsigned int division, float lowcx, float highcx, float low_c_occ, float high_c_occ);
 
     void search(IofQData & iofqdata, AtomisticModel & model, Waters & waterModel);
