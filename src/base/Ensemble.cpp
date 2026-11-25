@@ -275,6 +275,8 @@ void Ensemble::assemblePartials(unsigned int lmax, AtomisticModel &model,
 
     const float * wlmR = waterModel.getModelPartialsReal();
     const float * wlmI = waterModel.getModelPartialsImag();
+    const float * w0lmR = waterModel.getDisplacedPartialsReal(); // bulk water displaced by the sites (A_w0)
+    const float * w0lmI = waterModel.getDisplacedPartialsImag();
 
     float * pAp = Ap.data();
     float * pAw = Aw.data();
@@ -322,8 +324,9 @@ void Ensemble::assemblePartials(unsigned int lmax, AtomisticModel &model,
             a_p_norm +=  *pAlmPR * *pAlmPR + *pAlmPI * *pAlmPI;     // sum of the A*Atranspose
             a_w_norm +=  *pWlmR * *pWlmR + *pWlmI * *pWlmI;         // water layer
 
-            x_w_r = (*pXlmR + *pWlmR);
-            x_w_i = (*pXlmI + *pWlmI);
+            // excluded volume A_xw0 = A_x + A_w0 (bulk water displaced by protein and hydration sites)
+            x_w_r = (*pXlmR + w0lmR[index]);
+            x_w_i = (*pXlmI + w0lmI[index]);
 
             a_x_norm +=  x_w_r*x_w_r + x_w_i*x_w_i; // excluded volume, includes the water that form the scattered object
 

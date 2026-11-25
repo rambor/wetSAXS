@@ -27,6 +27,9 @@ list(APPEND SOURCES
         Ensemble.cpp
         Aligner.cpp
         HCPGridModel.cpp
+        SolventFluctuation.cpp
+        BufferModel.cpp
+        IonCloud.cpp
         )
 
 list(APPEND HEADERS
@@ -38,6 +41,9 @@ list(APPEND HEADERS
         Fit.h
         Result.h
         SBESJY.h
+        SolventFluctuation.h
+        BufferModel.h
+        IonCloud.h
         Ensemble.h
         Aligner.h
         SVD.h

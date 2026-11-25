@@ -37,6 +37,7 @@
 #include "Waters.h"
 
 class Waters;
+class IonCloud;
 
 class AtomisticModel {
     struct HashPair {
@@ -85,6 +86,7 @@ class AtomisticModel {
     std::vector<float> bead_phis;
 
     std::vector<float> ex_volume_weights;
+    const IonCloud * ionCloud = nullptr;
     std::vector<float> almRealSum; // partial sums
     std::vector<float> almImagSum;
     std::vector<float> almRealExcludedVolSum; // partial sums
@@ -142,6 +144,7 @@ public:
         bead_phis = std::move(model.bead_phis);
 
         ex_volume_weights = std::move(model.ex_volume_weights);
+        ionCloud = model.ionCloud;
         almRealSum = std::move(model.almRealSum);
         almImagSum = std::move(model.almImagSum);
 
@@ -185,6 +188,10 @@ public:
     const float * getThetas(){ return thetas.data();}
     const float * getPhis(){ return phis.data();}
     const float * getRValues() { return rvalues.data();}
+
+    // counterion cloud pseudo-atoms, added to A_p after every amplitude calculation (not owned)
+    void attachIonCloud(const IonCloud * cloud){ ionCloud = cloud; }
+    const IonCloud * getIonCloud() const { return ionCloud; }
 
     const float * getModelPartialsReal() { return almRealSum.data(); } // partial sums
     const float * getModelPartialsImag() { return almImagSum.data();}
@@ -231,34 +238,6 @@ public:
 
     void populateSphBesselsArray(int l, std::vector<float> &qr, float *bessel_alq);
 
-    // void setFractionalVolume(float volume){
-    //
-    //     fractionOccAtoms.resize(totalAtoms);
-    //     auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
-    //
-    //     float inv = 1.0f/volume;
-    //
-    //     for(unsigned int i=0; i<totalAtoms; i++){
-    //         fractionOccAtoms[i] =  pAtomicVolumes[i]*inv; // normalized to volume of water, looking at fractions of water volume
-    //     }
-    // }
-
-    /*
-     * Convert the Gerstein-Voronoi atomic radii into Gaussian radii
-     *
-     */
-    //    void setGaussianRadii(){
-    //        auto pAtomicVolumes = pdbModel.getAtomicVolumeVec();
-    //
-    //        gaussian_radii.resize(totalAtoms);
-    //        float * pvol;
-    //        float invpi3halves = 1.0f/std::sqrtf(M_PI*M_PI*M_PI);
-    //
-    //        for(unsigned int i=0; i<totalAtoms; i++){
-    //            pvol = &pAtomicVolumes[i];
-    //            gaussian_radii[i] =  std::cbrt(*pvol * invpi3halves); // normalized to volume of water, looking at fractions of water volume
-    //        }
-    //    }
 
     /*
      * Gaussian volumes where v = r^3 * pi^3/2
@@ -274,7 +253,6 @@ public:
         float qval2 = q_val*q_val;
 
         for(unsigned int i=0; i<totalAtoms; i++){
-
             diff = gaussian_radii[i]/1.75f;
             factor = pw_vol*(1 - diff*diff*diff);
 

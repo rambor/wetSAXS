@@ -29,6 +29,7 @@
 
 #include "Waters.h"
 #include "water_shell.h"
+#include "IonCloud.h"
 
 AtomisticModel::AtomisticModel(std::string filename, bool forceRNA, bool keepWaters) :
             filename(filename),
@@ -243,6 +244,9 @@ void AtomisticModel::calculatePartialAmplitudes(unsigned int lmax,
             }
         }
     }
+
+    // counterion atmosphere: fixed extra electrons in solvent, part of the particle amplitude
+    if (ionCloud != nullptr) ionCloud->addPartialAmplitudes(lmax, qvalues, ptrRAlm, ptrIAlm);
 
     try {
         setMatchPointScale(pdbModel.getAdjustedASFNumbers());
@@ -604,7 +608,6 @@ void AtomisticModel::createHCPGridModel(float bin_width){
         n1_index_b2 = (int)std::round( invsqrt3r * (sqrt3*temp.x - temp.y - 2*sqrt3inv3r) );
 
         // convert this to the basis indices
-        //index = std::to_string(n1_index).append("_").append(std::to_string(n2_index)).append("_").append(std::to_string(n3_index)).append("_-basis");
         index = std::to_string(n1_index_b2).append("_").append(std::to_string(n2_index_b2)).append("_").append(std::to_string(n3_index_b2)).append("_basis");
         bead_indices.insert(index);
 

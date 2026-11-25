@@ -1,0 +1,11 @@
+# wetSAXS buffer file
+# <component> <value> <unit>    units: M, mM, uM, g/L, mg/mL, %w/v, %v/v
+# custom component: <name> <value> <unit> Z=<electrons> MW=<g/mol> V=<cm^3/mol>
+temperature 25 C
+NaCl     137   mM
+KCl      2.7   mM
+Na2HPO4  10    mM
+KH2PO4   1.8   mM
+sucrose  1     %w/v
+# density 1.0080      # optional measured density (g/cm^3) at the temperature above
+pH       7.4
