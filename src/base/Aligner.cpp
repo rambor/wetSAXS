@@ -25,7 +25,7 @@
 #include <sastools/utils.h>
 #include <sastools/FileClass.h>
 #include <sastools/PDBModel.h>
-#include <boost/numeric/ublas/matrix.hpp>
+#include "Matrix.h"
 #include <cfloat>
 #include "Aligner.h"
 #include "SVD.h"
@@ -154,7 +154,7 @@ void Aligner::align(){
     } // all coordinates should be centered in the output ?
 
     // for each remaining pdb in pdbs, align to reference
-    boost::numeric::ublas::matrix<float> rotation;
+    la::Matrix<float> rotation;
     vector3 centering_vec_tar, centering_vec_ref;
 
     HCPGridModel hcpGridModel(5.5/2);
@@ -238,7 +238,7 @@ void Aligner::median_SVD_alignment(std::mt19937 & gen,
                                    std::vector<unsigned int> & indices,
                                    std::vector<vector3> &ref,
                                    std::vector<vector3> &tar,
-                                   boost::numeric::ublas::matrix<float> & rotation,
+                                   la::Matrix<float> & rotation,
                                    vector3 & centering_vec_ref,
                                    vector3 & centering_vec_tar) {
 
@@ -257,8 +257,8 @@ void Aligner::median_SVD_alignment(std::mt19937 & gen,
 
     float residual, bestResidual = FLT_MAX;
 
-    boost::numeric::ublas::matrix<float> bestRotation;
-    boost::numeric::ublas::matrix<float> i_m(3,3);
+    la::Matrix<float> bestRotation;
+    la::Matrix<float> i_m(3,3);
     i_m(0,0) = 1.0;
     i_m(1,1) = 1.0;
     i_m(2,2) = 1.0;
@@ -273,8 +273,8 @@ void Aligner::median_SVD_alignment(std::mt19937 & gen,
         std::sort(indices.begin(), indices.begin() + useThis);
 
         //assemble matrix
-        boost::numeric::ublas::matrix<float> p_ref(useThis, 3);
-        boost::numeric::ublas::matrix<float> q_tar(3, useThis);
+        la::Matrix<float> p_ref(useThis, 3);
+        la::Matrix<float> q_tar(3, useThis);
 
         vector3 ref_center(0,0,0);
         vector3 tar_center(0,0,0);
@@ -307,7 +307,7 @@ void Aligner::median_SVD_alignment(std::mt19937 & gen,
         * # covariance matrix
         */
         //a = q*p.transpose;
-        boost::numeric::ublas::matrix<float> a_matrix = boost::numeric::ublas::prod(q_tar, p_ref);
+        la::Matrix<float> a_matrix = la::prod(q_tar, p_ref);
         this->getRotationMatrix(a_matrix, i_m, rotation);
 
         row1 = vector3(rotation(0,0), rotation(0,1), rotation(0,2));
@@ -333,7 +333,7 @@ void Aligner::median_SVD_alignment(std::mt19937 & gen,
         // get median residual
         if (residual < bestResidual){
             bestResidual = residual;
-            bestRotation = boost::numeric::ublas::matrix(rotation);
+            bestRotation = la::Matrix(rotation);
             centering_vec_tar = tar_center;
             centering_vec_ref = ref_center;
             std::cout << r << " " << "Best Residual " << bestResidual << std::endl;
@@ -347,17 +347,17 @@ void Aligner::median_SVD_alignment(std::mt19937 & gen,
     rotation = bestRotation;
 }
 
-void Aligner::getRotationMatrix(boost::numeric::ublas::matrix<float> & a_matrix,
-                                boost::numeric::ublas::matrix<float> & i_m,
-                                boost::numeric::ublas::matrix<float> & rotation) {
+void Aligner::getRotationMatrix(la::Matrix<float> & a_matrix,
+                                la::Matrix<float> & i_m,
+                                la::Matrix<float> & rotation) {
 
-    boost::numeric::ublas::matrix<float> um;
-    boost::numeric::ublas::matrix<float> sm;
-    boost::numeric::ublas::matrix<float> vm;
-    boost::numeric::ublas::matrix<float> v_u;
-    boost::numeric::ublas::matrix<float> astar;
-    boost::numeric::ublas::matrix<float> vm_i_m;
-    boost::numeric::ublas::matrix<float> u_transpose;
+    la::Matrix<float> um;
+    la::Matrix<float> sm;
+    la::Matrix<float> vm;
+    la::Matrix<float> v_u;
+    la::Matrix<float> astar;
+    la::Matrix<float> vm_i_m;
+    la::Matrix<float> u_transpose;
 
     SVD svd;
     svd.svd(a_matrix, um, sm, vm);
@@ -367,9 +367,9 @@ void Aligner::getRotationMatrix(boost::numeric::ublas::matrix<float> & a_matrix,
     // sgn = (v*u.transpose).det <=> 0
     // m[3-1, 3-1] = sgn
     // rot = (v*m)*u.transpose
-    u_transpose = boost::numeric::ublas::trans(um);
-    v_u = boost::numeric::ublas::prod(vm, u_transpose);
+    u_transpose = la::trans(um);
+    v_u = la::prod(vm, u_transpose);
     i_m(2,2) = svd.sgn(svd.determinant(v_u));
-    vm_i_m = boost::numeric::ublas::prod(vm, i_m);
-    rotation = boost::numeric::ublas::prod(vm_i_m, u_transpose);
+    vm_i_m = la::prod(vm, i_m);
+    rotation = la::prod(vm_i_m, u_transpose);
 }

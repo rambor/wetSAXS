@@ -381,7 +381,7 @@ void Ensemble::populateIntensitiesModel(unsigned int totalInWorkingSet,
     unsigned int lmax,
     AtomisticModel &pdbmodel,
     Waters &waterModel,
-    boost::numeric::ublas::matrix<float> & models,
+    la::Matrix<float> & models,
     float cx,
     float co,
     unsigned int mdl_cnt) {
@@ -418,10 +418,10 @@ void Ensemble::populateIntensitiesModel(unsigned int totalInWorkingSet,
 /*
  * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
  */
-void Ensemble::svd(boost::numeric::ublas::matrix < float >&A,
-                   boost::numeric::ublas::matrix < float >&QQL,
-                   boost::numeric::ublas::matrix < float >&sigmas, // singular values
-                   boost::numeric::ublas::matrix < float >&QQR) {
+void Ensemble::svd(la::Matrix< float >&A,
+                   la::Matrix< float >&QQL,
+                   la::Matrix< float >&sigmas, // singular values
+                   la::Matrix< float >&QQR) {
     unsigned int row_num = A.size1();
     unsigned int col_num = A.size2();
 
@@ -439,8 +439,8 @@ void Ensemble::svd(boost::numeric::ublas::matrix < float >&A,
         householder(A, QQR, i, i + 1, false);
     }
 
-    boost::numeric::ublas::vector < float > d(to, 0.0f);
-    boost::numeric::ublas::vector < float > s(to + 1, 0.0f);
+    la::Vector< float > d(to, 0.0f);
+    la::Vector< float > s(to + 1, 0.0f);
 
     for (unsigned int i = 0; i < to; i++) {
         d(i) = A(i, i);
@@ -457,8 +457,8 @@ void Ensemble::svd(boost::numeric::ublas::matrix < float >&A,
 }
 
 
-void Ensemble::householder(boost::numeric::ublas::matrix < float > & A,
-                           boost::numeric::ublas::matrix < float > & QQ,
+void Ensemble::householder(la::Matrix< float > & A,
+                           la::Matrix< float > & QQ,
             unsigned int row_start, unsigned int col_start, bool column) {
 
     unsigned int size = column ? A.size1() : A.size2();
@@ -467,7 +467,7 @@ void Ensemble::householder(boost::numeric::ublas::matrix < float > & A,
     if (start >= size)
         return;
 
-    boost::numeric::ublas::vector < float > x(size);
+    la::Vector< float > x(size);
     for (unsigned int i = 0; i < size; i++) {
         if (i < start) {
             x(i) = 0;
@@ -483,12 +483,12 @@ void Ensemble::householder(boost::numeric::ublas::matrix < float > & A,
 
     float alpha = (x(start) >= 0.0f ? 1.0f : -1.0f) * x_norm;
 
-    boost::numeric::ublas::vector<float> v = x;
+    la::Vector<float> v = x;
 
     v(start) += alpha;
     normalize(v);
 
-    boost::numeric::ublas::matrix < float > Q;
+    la::Matrix< float > Q;
 
     if (column) {
         for (unsigned int i = 0; i < A.size2(); i++) {
@@ -531,10 +531,10 @@ void Ensemble::householder(boost::numeric::ublas::matrix < float > & A,
 }
 
 
-void Ensemble::svd_qr_shift(boost::numeric::ublas::matrix < float >&u,
-                            boost::numeric::ublas::matrix < float >&v,
-                            boost::numeric::ublas::vector < float >&q,
-                            boost::numeric::ublas::vector < float >&e)
+void Ensemble::svd_qr_shift(la::Matrix< float >&u,
+                            la::Matrix< float >&v,
+                            la::Vector< float >&q,
+                            la::Vector< float >&e)
 {
     int n = (int)q.size();
     int m = (int)u.size1();
@@ -669,12 +669,12 @@ void Ensemble::svd_qr_shift(boost::numeric::ublas::matrix < float >&u,
 
 void Ensemble::pseudo_inverse(
         unsigned int limit,
-        boost::numeric::ublas::matrix < float >&A_star,
-        boost::numeric::ublas::matrix < float >& um,
-        boost::numeric::ublas::matrix < float >& sm, // singular values
-        boost::numeric::ublas::matrix < float >& vm) {
+        la::Matrix< float >&A_star,
+        la::Matrix< float >& um,
+        la::Matrix< float >& sm, // singular values
+        la::Matrix< float >& vm) {
 
-    boost::numeric::ublas::matrix<float> inv_sm(sm.size1(), sm.size2(), 0.0f);
+    la::Matrix<float> inv_sm(sm.size1(), sm.size2(), 0.0f);
     // form pseudo inverse up to the lmax limit
     // not sure if I should be doing reduced SVD or regular?
     for(unsigned int i=0; i<limit; i++){
@@ -682,8 +682,8 @@ void Ensemble::pseudo_inverse(
     }
 
     // A_star = vm*inv_sm_T*um_T
-    A_star = boost::numeric::ublas::prod(boost::numeric::ublas::trans(inv_sm), boost::numeric::ublas::trans(um));
-    A_star = boost::numeric::ublas::prod(vm, A_star);
+    A_star = la::prod(la::trans(inv_sm), la::trans(um));
+    A_star = la::prod(vm, A_star);
 }
 
 
@@ -715,11 +715,11 @@ void Ensemble::standardizeData(nsNNLS::vector * vec, nsNNLS::vector * out_vec){
  */
 float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_variance,
                                         std::vector<float> & inv_variance,
-                                        boost::numeric::ublas::matrix<float> & coeffs,
-                                        boost::numeric::ublas::matrix<float> & model_iqs,
+                                        la::Matrix<float> & coeffs,
+                                        la::Matrix<float> & model_iqs,
                                          std::vector<float> & qvalues,
-                                         boost::numeric::ublas::matrix<float> & i_calc_all,
-                                        boost::numeric::ublas::matrix<float> & i_obs){
+                                         la::Matrix<float> & i_calc_all,
+                                        la::Matrix<float> & i_obs){
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -731,8 +731,8 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
 
     unsigned int totalModels = model_iqs.size2();
     std::vector<unsigned int> model_counts(totalModels); // should be one for every model
-    boost::numeric::ublas::matrix<float> b_vec(totalModels,1);
-    boost::numeric::ublas::matrix<float> i_calc(model_iqs.size1(),1);
+    la::Matrix<float> b_vec(totalModels,1);
+    la::Matrix<float> i_calc(model_iqs.size1(),1);
 
     std::uniform_real_distribution<float> distributions(0,1.0);
     std::uniform_int_distribution<unsigned int> indices(0, totalModels-1);
@@ -772,7 +772,7 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
         b_vec(m,0) = 1.0/(float)totalModels;
     }
 
-    i_calc_all = boost::numeric::ublas::prod(model_iqs, b_vec);
+    i_calc_all = la::prod(model_iqs, b_vec);
     // calculate scalar
     scalar = calculate_scalar(totalInWorkingSet, i_calc_all, i_obs_over_variance, inv_variance);
     // print out the entire ensemble composite scattering curve
@@ -820,7 +820,7 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
                 b_vec(m,0) = (float)model_counts[m] * inv_ensemble_size;
             }
 
-            i_calc = boost::numeric::ublas::prod(model_iqs, b_vec);
+            i_calc = la::prod(model_iqs, b_vec);
             // calculate scalar
             scalar = calculate_scalar(totalInWorkingSet, i_calc, i_obs_over_variance, inv_variance);
 
@@ -957,7 +957,7 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
     }
 
     // perform linear fits of top four identified conformers
-//    boost::numeric::ublas::matrix<float> model_iqs_4(model_iqs.size1(), 4);
+//    la::Matrix<float> model_iqs_4(model_iqs.size1(), 4);
 //    unsigned int col = 0;
 //    for (auto & ind : top4) {
 //        // combine and add noise
@@ -1047,8 +1047,8 @@ float Ensemble::crossEntropyOptimization(std::vector<float> & i_obs_over_varianc
 void Ensemble::combinatorial (
                               std::vector<float> &inv_variance,
                               std::vector<unsigned int> selected_indices_of_model_iqs,
-                              boost::numeric::ublas::matrix<float> &model_iqs,
-                              boost::numeric::ublas::matrix<float> &i_obs,
+                              la::Matrix<float> &model_iqs,
+                              la::Matrix<float> &i_obs,
                               unsigned int totalQInWorkingSet,
                               int maxk) {
 
@@ -1062,10 +1062,10 @@ void Ensemble::combinatorial (
     logger("Total Models", std::to_string(n_models));
     logger("Starting", "pairwise SVD search");
 
-    boost::numeric::ublas::matrix<float> um;
-    boost::numeric::ublas::matrix<float> sm;
-    boost::numeric::ublas::matrix<float> vm;
-    boost::numeric::ublas::matrix<float> astar;
+    la::Matrix<float> um;
+    la::Matrix<float> sm;
+    la::Matrix<float> vm;
+    la::Matrix<float> astar;
 
     std::vector<float> residuals(totalQInWorkingSet);
     float diff, score, chi, dw;
@@ -1077,7 +1077,7 @@ void Ensemble::combinatorial (
 
     for (unsigned int k=1; k<=maxk; k++){
 
-        boost::numeric::ublas::matrix<float> trial_models(totalQInWorkingSet,k);
+        la::Matrix<float> trial_models(totalQInWorkingSet,k);
 
         float best_score = FLT_MAX;
 
@@ -1098,14 +1098,14 @@ void Ensemble::combinatorial (
                 }
             }
 
-            boost::numeric::ublas::matrix<float> a_matrix(trial_models); // make copy of matrix
+            la::Matrix<float> a_matrix(trial_models); // make copy of matrix
             this->svd(trial_models, um, sm, vm);
             // lmax might be 23 and trial_models.size2 might be 2, so looking for the best pair
             // unsigned int limitSm = (lmax < trial_models.size2()) ? lmax : trial_models.size2();
             unsigned int limitSm = trial_models.size2();
             this->pseudo_inverse(limitSm, astar, um, sm, vm);
 
-            boost::numeric::ublas::matrix<float> constants = boost::numeric::ublas::prod(astar, i_obs);
+            la::Matrix<float> constants = la::prod(astar, i_obs);
 
             // all scaling constants must be greater than zero
             bool skip = true;
@@ -1116,7 +1116,7 @@ void Ensemble::combinatorial (
             }
 
             if (skip){ // score the answer
-                boost::numeric::ublas::matrix<float> i_calc = boost::numeric::ublas::prod(a_matrix, constants);
+                la::Matrix<float> i_calc = la::prod(a_matrix, constants);
                 // calculate residuals
                 for(unsigned int q =0; q < totalQInWorkingSet; q++) {
                     diff = i_obs(q,0) - i_calc(q,0);

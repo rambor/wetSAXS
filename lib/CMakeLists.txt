@@ -40,6 +40,7 @@ addToIt(SVD)
 addToIt(HCPGridModel)
 addToIt(Mask)
 addToIt(FCCModel)
+addToIt(Matrix)
 
 include_directories(../src/base)
 include_directories(../src/fsrc)

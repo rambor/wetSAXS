@@ -20,7 +20,7 @@
 //
 // Created by Robert Rambo on 26/02/2025.
 //
-#include <boost/numeric/ublas/matrix.hpp>
+#include "Matrix.h"
 #include "gtest/gtest.h"
 #include "support.hpp"
 #include "HCPGridModel.h"

@@ -21,8 +21,9 @@
 // Created by Robert Rambo on 26/02/2025.
 //
 #include <sastools/PDBModel.h>
-#include <boost/numeric/ublas/matrix.hpp>
+#include "Matrix.h"
 #include "gtest/gtest.h"
+#include <filesystem>
 #include "support.hpp"
 #include "Aligner.h"
 
@@ -34,7 +35,7 @@ public:
 
 TEST_F(AlignerTests, readFile) {
 
-    boost::filesystem::path full_path(boost::filesystem::current_path());
+    std::filesystem::path full_path(std::filesystem::current_path());
     std::cout << "Current path is : " << full_path << std::endl;
     Aligner align(fixture(aligner.txt), full_path.string());
 
@@ -67,15 +68,15 @@ TEST_F(AlignerTests, svdAlignmentTest) {
     std::cout << "Current path is : " << full_path << std::endl;
     Aligner align(fixture(aligner.txt), full_path);
 
-    boost::numeric::ublas::matrix<float> rotation;
-    boost::numeric::ublas::matrix<float> i_m(3,3);
+    la::Matrix<float> rotation;
+    la::Matrix<float> i_m(3,3);
 
     i_m(0,0) = 1.0;
     i_m(1,1) = 1.0;
     i_m(2,2) = 1.0;
 
-    boost::numeric::ublas::matrix<float> p_ref(5, 3);
-    boost::numeric::ublas::matrix<float> q_tar(3, 5);
+    la::Matrix<float> p_ref(5, 3);
+    la::Matrix<float> q_tar(3, 5);
 //ATOM      5  CA  ASP     1      20.990  -3.760  25.490  1.00  0.00           C
     p_ref(0,0) = 20.990;
     p_ref(0,1) = -3.760;
@@ -140,7 +141,7 @@ TEST_F(AlignerTests, svdAlignmentTest) {
         q_tar(2,j) -= tar_center.z;
     }
 
-    boost::numeric::ublas::matrix<float> a_matrix = boost::numeric::ublas::prod(q_tar, p_ref);
+    la::Matrix<float> a_matrix = la::prod(q_tar, p_ref);
 
     align.getRotationMatrix(a_matrix, i_m, rotation);
 

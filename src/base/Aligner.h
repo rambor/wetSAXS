@@ -56,13 +56,13 @@ public:
                               std::vector<unsigned int> & indices,
                               std::vector<vector3> & ref,
                               std::vector<vector3> & tar,
-                              boost::numeric::ublas::matrix<float> & rotation,
+                              la::Matrix<float> & rotation,
                               vector3 & centering_vec_ref,
                               vector3 & centering_vec_tar);
 
-    void getRotationMatrix(boost::numeric::ublas::matrix<float> &a_matrix,
-                      boost::numeric::ublas::matrix<float> &i_m,
-                      boost::numeric::ublas::matrix<float> &rotation);
+    void getRotationMatrix(la::Matrix<float> &a_matrix,
+                      la::Matrix<float> &i_m,
+                      la::Matrix<float> &rotation);
 };
 
 

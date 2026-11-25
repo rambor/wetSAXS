@@ -47,6 +47,7 @@ list(APPEND HEADERS
         Ensemble.h
         Aligner.h
         SVD.h
+        Matrix.h
         HCPGridModel.h
         FCCModel.h
         )

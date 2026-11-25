@@ -27,9 +27,7 @@
 
 #include <sastools/FileClass.h>
 #include <boost/filesystem.hpp>
-#include <boost/numeric/ublas/matrix.hpp>
-#include <boost/numeric/ublas/matrix_proxy.hpp>
-#include <boost/numeric/ublas/io.hpp>
+#include "Matrix.h"
 #include <vector>
 #include <string>
 #include <sastools/IofQData.h>
@@ -91,11 +89,11 @@ class Ensemble {
     struct Trial{
         double value;
         double chi, dw, scale_factor;
-        boost::numeric::ublas::matrix<float> model_weights;
+        la::Matrix<float> model_weights;
         std::vector<unsigned int> indices;
         Trial() = default;
 
-        Trial(double val, boost::numeric::ublas::matrix<float> & vec) : value(val) {
+        Trial(double val, la::Matrix<float> & vec) : value(val) {
             model_weights = std::move(vec);
         }
 
@@ -213,7 +211,7 @@ public:
                                               unsigned int lmax,
                                               AtomisticModel & pdbmodel,
                                               Waters & waterModel,
-                                              boost::numeric::ublas::matrix<float> & models,
+                                              la::Matrix<float> & models,
                                               float cx,
                                               float co,
                                               unsigned int mdl_cnt);
@@ -234,7 +232,7 @@ public:
     /*
      * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
      */
-    void identity(boost::numeric::ublas::matrix < float >&m){
+    void identity(la::Matrix< float >&m){
         for (unsigned int i = 0; i < m.size1(); i++)
             for (unsigned int j = 0; j < m.size2(); j++)
                 m(i, j) = (i == j) ? 1.0f : 0.0f;
@@ -243,7 +241,7 @@ public:
     /*
      * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
      */
-    float norm(boost::numeric::ublas::vector < float >&x){
+    float norm(la::Vector< float >&x){
         float x_norm = 0.0;
 
         for (unsigned int i = 0; i < x.size(); i++)
@@ -255,41 +253,41 @@ public:
     /*
      * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
      */
-    void normalize(boost::numeric::ublas::vector < float >&x){
+    void normalize(la::Vector< float >&x){
         float invx_norm = 1.0f/norm(x);
         for (unsigned int i = 0; i < x.size(); i++) {
             x(i) *= invx_norm;
         }
     }
 
-    void svd(boost::numeric::ublas::matrix<float> &A,
-             boost::numeric::ublas::matrix<float> &QQL,
-             boost::numeric::ublas::matrix<float> &QQW,
-             boost::numeric::ublas::matrix<float> &QQR);
+    void svd(la::Matrix<float> &A,
+             la::Matrix<float> &QQL,
+             la::Matrix<float> &QQW,
+             la::Matrix<float> &QQR);
 
 
-    void householder(boost::numeric::ublas::matrix<float> &A,
-                     boost::numeric::ublas::matrix<float> &QQ,
+    void householder(la::Matrix<float> &A,
+                     la::Matrix<float> &QQ,
                      unsigned int row_start,
                      unsigned int col_start,
                      bool column);
 
-    void svd_qr_shift(boost::numeric::ublas::matrix<float> &u,
-                      boost::numeric::ublas::matrix<float> &v,
-                      boost::numeric::ublas::vector<float> &q,
-                      boost::numeric::ublas::vector<float> &e);
+    void svd_qr_shift(la::Matrix<float> &u,
+                      la::Matrix<float> &v,
+                      la::Vector<float> &q,
+                      la::Vector<float> &e);
 
 
     void pseudo_inverse(unsigned int lmax,
-                        boost::numeric::ublas::matrix<float> &A_star,
-                        boost::numeric::ublas::matrix<float> &um,
-                        boost::numeric::ublas::matrix<float> &sm,
-                        boost::numeric::ublas::matrix<float> &vm);
+                        la::Matrix<float> &A_star,
+                        la::Matrix<float> &um,
+                        la::Matrix<float> &sm,
+                        la::Matrix<float> &vm);
 
-//    void nnls(boost::numeric::ublas::matrix<float> &y_m, boost::numeric::ublas::matrix<float> &x_m,
-//              boost::numeric::ublas::matrix<float> &A_m);
+//    void nnls(la::Matrix<float> &y_m, la::Matrix<float> &x_m,
+//              la::Matrix<float> &A_m);
 
-    unsigned int get_max_index(boost::numeric::ublas::matrix<float> &vector);
+    unsigned int get_max_index(la::Matrix<float> &vector);
 
     void standardizeData(nsNNLS::vector *vec, nsNNLS::vector *out_vec);
 
@@ -317,7 +315,7 @@ public:
 
         std::vector<float> i_obs_over_variance(totalInWorkingSet);
         std::vector<float> inv_variance(totalInWorkingSet);
-        boost::numeric::ublas::matrix<float> y_vector(totalInWorkingSet, 1);
+        la::Matrix<float> y_vector(totalInWorkingSet, 1);
 
         for(unsigned int q =0; q < totalInWorkingSet; q++) {
             const Datum *pW = &workingSet[q];
@@ -326,8 +324,8 @@ public:
             y_vector(q, 0) = pW->getI();
         }
 
-        boost::numeric::ublas::matrix<float> coeffs(filenames.size(),1);
-        boost::numeric::ublas::matrix<float> models(totalInWorkingSet,filenames.size());
+        la::Matrix<float> coeffs(filenames.size(),1);
+        la::Matrix<float> models(totalInWorkingSet,filenames.size());
         unsigned int mdl_cnt=0;
 
         for (auto & filename : filenames){
@@ -371,7 +369,7 @@ public:
         ensemble_size = 37;
         totalPerRound = 7*models.size2(); // should be optimized but for now will do 3xtimes
 
-        boost::numeric::ublas::matrix<float> i_calc_all(models.size1(),1);
+        la::Matrix<float> i_calc_all(models.size1(),1);
 
         float val = this->crossEntropyOptimization(i_obs_over_variance,
                                                    inv_variance,
@@ -385,7 +383,7 @@ public:
         //
         // iofqdata.setAllDataToWorkingSet();
         // coeffs relates only to the
-        auto i_calc = boost::numeric::ublas::prod(models, coeffs);
+        auto i_calc = la::prod(models, coeffs);
 
         std::string nameOf = "top_fit.dat";
         FILE * pFile = fopen(nameOf.c_str(), "w");
@@ -454,7 +452,7 @@ public:
         SASTOOLS_UTILS_H::logger("LMAX", std::to_string(lmax));
 
         std::vector<float> inv_variance(totalInWorkingSet);
-        boost::numeric::ublas::matrix<float> i_obs(totalInWorkingSet, 1);
+        la::Matrix<float> i_obs(totalInWorkingSet, 1);
 
         // rescale data to max at 1
         float max_I = -FLT_MIN;
@@ -472,8 +470,8 @@ public:
             i_obs(q, 0) = pW->getI()/max_I;
         }
 
-        boost::numeric::ublas::matrix<float> coeffs(filenames.size(),1);
-        boost::numeric::ublas::matrix<float> models(totalInWorkingSet,filenames.size());
+        la::Matrix<float> coeffs(filenames.size(),1);
+        la::Matrix<float> models(totalInWorkingSet,filenames.size());
 
         std::vector<unsigned int> selected_indices_of_model_iqs;
         unsigned int mdl_cnt=0;
@@ -538,11 +536,11 @@ public:
 
     float crossEntropyOptimization(std::vector<float> &i_obs_over_variance,
                                    std::vector<float> &inv_variance,
-                                   boost::numeric::ublas::matrix<float> &coeffs,
-                                   boost::numeric::ublas::matrix<float> &model_iqs,
+                                   la::Matrix<float> &coeffs,
+                                   la::Matrix<float> &model_iqs,
                                    std::vector<float> & qvalues,
-                                   boost::numeric::ublas::matrix<float> &i_calc_all,
-                                   boost::numeric::ublas::matrix<float> &i_obs);
+                                   la::Matrix<float> &i_calc_all,
+                                   la::Matrix<float> &i_obs);
 
 
     // ens.combinations(values, 1, 50, 1, 2);
@@ -582,8 +580,8 @@ public:
     void combinatorial (
                         std::vector<float> &inv_variance,
                         std::vector<unsigned int> selected_indices_of_model_iqs,
-                        boost::numeric::ublas::matrix<float> &model_iqs,
-                        boost::numeric::ublas::matrix<float> &i_obs,
+                        la::Matrix<float> &model_iqs,
+                        la::Matrix<float> &i_obs,
                         unsigned int totalQInWorkingSet,
                         int maxk);
 
@@ -618,7 +616,7 @@ public:
         return _next_combination(n, r, curr_comb, r - 1);
     }
 
-    float calculate_scalar(unsigned int totalInWorkingSet, boost::numeric::ublas::matrix<float> & i_calc,
+    float calculate_scalar(unsigned int totalInWorkingSet, la::Matrix<float> & i_calc,
                            std::vector<float> & i_obs_over_variance,
                            std::vector<float> & inv_variance){
 

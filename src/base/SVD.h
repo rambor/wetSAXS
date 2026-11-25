@@ -26,13 +26,9 @@
 
 #include <string>
 #include <iostream>
-#include <boost/filesystem.hpp>
 #include <utility>
 #include <fstream>
-#include <boost/regex.hpp>
-#include <boost/numeric/ublas/matrix.hpp>
-#include <boost/numeric/ublas/matrix_proxy.hpp>
-#include <boost/numeric/ublas/io.hpp>
+#include "Matrix.h"
 #include <random>
 #include <sastools/simde-no-tests-master/simde-math.h>
 
@@ -61,7 +57,7 @@ public:
     /*
      * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
      */
-    void identity(boost::numeric::ublas::matrix < float >&m){
+    void identity(la::Matrix< float >&m){
         for (unsigned int i = 0; i < m.size1(); i++)
             for (unsigned int j = 0; j < m.size2(); j++)
                 m(i, j) = (i == j) ? 1.0f : 0.0f;
@@ -70,7 +66,7 @@ public:
     /*
      * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
      */
-    float norm(boost::numeric::ublas::vector < float >&x){
+    float norm(la::Vector< float >&x){
         float x_norm = 0.0;
 
         for (unsigned int i = 0; i < x.size(); i++)
@@ -82,17 +78,17 @@ public:
     /*
      * adapted from SVD-ublas by Volodymyr Kysenko (vksnk)
      */
-    void normalize(boost::numeric::ublas::vector < float >&x){
+    void normalize(la::Vector< float >&x){
         float invx_norm = 1.0f/norm(x);
         for (unsigned int i = 0; i < x.size(); i++) {
             x(i) *= invx_norm;
         }
     }
 
-    void svd(boost::numeric::ublas::matrix<float> &A,
-             boost::numeric::ublas::matrix<float> &QQL,
-             boost::numeric::ublas::matrix<float> &sigmas,
-             boost::numeric::ublas::matrix<float> &QQR) {
+    void svd(la::Matrix<float> &A,
+             la::Matrix<float> &QQL,
+             la::Matrix<float> &sigmas,
+             la::Matrix<float> &QQR) {
 
         unsigned int row_num = A.size1();
         unsigned int col_num = A.size2();
@@ -111,8 +107,8 @@ public:
             householder(A, QQR, i, i + 1, false);
         }
 
-        boost::numeric::ublas::vector < float > d(to, 0.0f);
-        boost::numeric::ublas::vector < float > s(to + 1, 0.0f);
+        la::Vector< float > d(to, 0.0f);
+        la::Vector< float > s(to + 1, 0.0f);
 
         for (unsigned int i = 0; i < to; i++) {
             d(i) = A(i, i);
@@ -129,8 +125,8 @@ public:
     }
 
 
-    void householder(boost::numeric::ublas::matrix<float> &A,
-                     boost::numeric::ublas::matrix<float> &QQ,
+    void householder(la::Matrix<float> &A,
+                     la::Matrix<float> &QQ,
                      unsigned int row_start,
                      unsigned int col_start,
                      bool column) {
@@ -141,7 +137,7 @@ public:
         if (start >= size)
             return;
 
-        boost::numeric::ublas::vector < float > x(size);
+        la::Vector< float > x(size);
         for (unsigned int i = 0; i < size; i++) {
             if (i < start) {
                 x(i) = 0;
@@ -157,12 +153,12 @@ public:
 
         float alpha = (x(start) >= 0.0f ? 1.0f : -1.0f) * x_norm;
 
-        boost::numeric::ublas::vector<float> v = x;
+        la::Vector<float> v = x;
 
         v(start) += alpha;
         normalize(v);
 
-        boost::numeric::ublas::matrix < float > Q;
+        la::Matrix< float > Q;
 
         if (column) {
             for (unsigned int i = 0; i < A.size2(); i++) {
@@ -204,10 +200,10 @@ public:
         }
     }
 
-    void svd_qr_shift(boost::numeric::ublas::matrix<float> &u,
-                      boost::numeric::ublas::matrix<float> &v,
-                      boost::numeric::ublas::vector<float> &q,
-                      boost::numeric::ublas::vector<float> &e) {
+    void svd_qr_shift(la::Matrix<float> &u,
+                      la::Matrix<float> &v,
+                      la::Vector<float> &q,
+                      la::Vector<float> &e) {
 
         int n = (int)q.size();
         int m = (int)u.size1();
@@ -341,12 +337,12 @@ public:
 
 
     void pseudo_inverse(unsigned int lmax,
-                        boost::numeric::ublas::matrix<float> &A_star,
-                        boost::numeric::ublas::matrix<float> &um,
-                        boost::numeric::ublas::matrix<float> &sm,
-                        boost::numeric::ublas::matrix<float> &vm) {
+                        la::Matrix<float> &A_star,
+                        la::Matrix<float> &um,
+                        la::Matrix<float> &sm,
+                        la::Matrix<float> &vm) {
 
-        boost::numeric::ublas::matrix<float> inv_sm(sm.size1(), sm.size2(), 0.0f);
+        la::Matrix<float> inv_sm(sm.size1(), sm.size2(), 0.0f);
         // form pseudo inverse up to the lmax limit
         // not sure if I should be doing reduced SVD or regular?
         for(unsigned int i=0; i<lmax; i++){
@@ -354,15 +350,15 @@ public:
         }
 
         // A_star = vm*inv_sm_T*um_T
-        A_star = boost::numeric::ublas::prod(boost::numeric::ublas::trans(inv_sm), boost::numeric::ublas::trans(um));
-        A_star = boost::numeric::ublas::prod(vm, A_star);
+        A_star = la::prod(la::trans(inv_sm), la::trans(um));
+        A_star = la::prod(vm, A_star);
     }
 
 
     /*
      * only 3x3 matrix
      */
-    float determinant(boost::numeric::ublas::matrix<float> &a_matrix) {
+    float determinant(la::Matrix<float> &a_matrix) {
         return a_matrix(0,0)*(a_matrix(1,1)*a_matrix(2,2) - a_matrix(1,2)*a_matrix(2,1))
         - a_matrix(0,1)*(a_matrix(1,0)*a_matrix(2,2) - a_matrix(1,2)*a_matrix(2,0))
         + a_matrix(0,2)*(a_matrix(1,0)*a_matrix(2,1) - a_matrix(1,1)*a_matrix(2,0));

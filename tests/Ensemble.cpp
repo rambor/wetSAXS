@@ -22,6 +22,7 @@
 //
 
 #include "gtest/gtest.h"
+#include <filesystem>
 #include "support.hpp"
 #include <Ensemble.h>
 #include <random>
@@ -40,7 +41,7 @@ public:
     void addNoise(unsigned int totalInWorkingSet, float scaleIt, std::vector<float> &i_obs,
                   std::vector<float> & i_obs_over_variance,
                   const std::vector<Datum> & workingSet,
-                  boost::numeric::ublas::matrix<float> & y_vector){
+                  la::Matrix<float> & y_vector){
 
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -109,7 +110,7 @@ TEST_F(EnsembleTests, ConstructorTest){
 
     files.emplace_back(fixture(bsa_md_1_7.pdb));
 
-    boost::filesystem::path full_path(boost::filesystem::current_path());
+    std::filesystem::path full_path(std::filesystem::current_path());
     std::cout << "Current path is : " << full_path << std::endl;
 
     Ensemble ens = Ensemble(files, full_path.string());
@@ -132,7 +133,7 @@ TEST_F(EnsembleTests, ConstructorDirExistsExceptionTest){
     std::vector<std::string> files;
     files.emplace_back("doesnotExist.txt");
 
-    std::string dir = boost::filesystem::current_path().string();
+    std::string dir = std::filesystem::current_path().string();
 
     EXPECT_NO_THROW(Ensemble(files, dir));
 }
@@ -168,9 +169,9 @@ TEST_F(EnsembleTests, ConstructorDirAndFilesExistsExceptionTest){
 
 TEST_F(EnsembleTests, SingularValueDeterminationTest){
 
-    boost::numeric::ublas::matrix<float> um;
-    boost::numeric::ublas::matrix<float> sm;
-    boost::numeric::ublas::matrix<float> vm;
+    la::Matrix<float> um;
+    la::Matrix<float> sm;
+    la::Matrix<float> vm;
 
     std::vector<std::string> files;
     files.emplace_back(fixture(bsa_md_1_7.pdb));
@@ -199,7 +200,7 @@ TEST_F(EnsembleTests, SingularValueDeterminationTest){
     unsigned int cnt=0, totalInWorkingSet = qvalues.size();
     unsigned lmax = (unsigned int)((maxq*91)/SIMDE_MATH_PI) + 1;
 
-    boost::numeric::ublas::matrix<float> exam(totalInWorkingSet,files.size());
+    la::Matrix<float> exam(totalInWorkingSet,files.size());
 
 
     Ensemble ens = Ensemble(files, test_dir());
@@ -244,7 +245,7 @@ TEST_F(EnsembleTests, SingularValueDeterminationTest){
 
     ens.svd(exam, um, sm, vm);
 
-//    boost::numeric::ublas::matrix<float> astar;
+//    la::Matrix<float> astar;
 //    ens.pseudo_inverse(lmax, astar, um, sm, vm);
 
     // based on condition number, the number of independent columns should be Lmax
@@ -299,8 +300,8 @@ TEST_F(EnsembleTests, CEDecompositionTest){
 
     unsigned lmax = (unsigned int)((maxq*92)/SIMDE_MATH_PI) + 1;
 
-    boost::numeric::ublas::matrix<float> models(totalInWorkingSet,files.size());
-    boost::numeric::ublas::matrix<float> y_vector(totalInWorkingSet, 1);
+    la::Matrix<float> models(totalInWorkingSet,files.size());
+    la::Matrix<float> y_vector(totalInWorkingSet, 1);
 
     Ensemble ens = Ensemble(files, test_dir());
 
@@ -354,8 +355,8 @@ TEST_F(EnsembleTests, CEDecompositionTest){
 
     addNoise(totalInWorkingSet, scaleIt, i_obs, i_obs_over_variance, workingSet, y_vector);
 
-    boost::numeric::ublas::matrix<float> coeffs(models.size1(),1);
-    boost::numeric::ublas::matrix<float> icalcall(totalInWorkingSet,1);
+    la::Matrix<float> coeffs(models.size1(),1);
+    la::Matrix<float> icalcall(totalInWorkingSet,1);
 
     // crossEntropyOptimization
     ens.crossEntropyOptimization(i_obs_over_variance, inv_variance, coeffs, models, qvalues, icalcall, y_vector);
@@ -388,7 +389,7 @@ TEST_F(EnsembleTests, SVDLinearDecompositionWithNoiseTest){
     files.emplace_back(fixture(bsa_md_1_700.pdb)); // 10
 
     std::vector<float> ratios = {0.17, 0.23, 0.53, 0.07};
-    boost::numeric::ublas::matrix<float> factors(4,1);
+    la::Matrix<float> factors(4,1);
     factors(0,0) = 0.17;
     factors(1,0) = 0.23;
     factors(2,0) = 0.53;
@@ -403,7 +404,7 @@ TEST_F(EnsembleTests, SVDLinearDecompositionWithNoiseTest){
 
     unsigned lmax = (unsigned int)((maxq*91)/SIMDE_MATH_PI) + 1;
 
-    boost::numeric::ublas::matrix<float> models(totalInWorkingSet,files.size());
+    la::Matrix<float> models(totalInWorkingSet,files.size());
     Ensemble ens = Ensemble(files, test_dir());
 
     float max_Iq = -FLT_MIN;
@@ -480,7 +481,7 @@ TEST_F(EnsembleTests, SVDLinearDecompositionWithNoiseTest){
 
     scaleIt = 1; // i_obs[0];
 
-    boost::numeric::ublas::matrix<float> y_vector(totalInWorkingSet, 1);
+    la::Matrix<float> y_vector(totalInWorkingSet, 1);
     sum /= (float)5;
 
     //   for(unsigned int q=0; q<totalInWorkingSet; q++){
@@ -499,16 +500,16 @@ TEST_F(EnsembleTests, SVDLinearDecompositionWithNoiseTest){
     }
 
     // perform SVD and pseudoinverse
-    boost::numeric::ublas::matrix<float> um;
-    boost::numeric::ublas::matrix<float> sm;
-    boost::numeric::ublas::matrix<float> vm;
-    boost::numeric::ublas::matrix<float> astar;
+    la::Matrix<float> um;
+    la::Matrix<float> sm;
+    la::Matrix<float> vm;
+    la::Matrix<float> astar;
 
     ens.svd(models, um, sm, vm);
     unsigned int limitSm = (lmax < models.size2()) ? lmax : models.size2();
     ens.pseudo_inverse(limitSm, astar, um, sm, vm);
 
-    boost::numeric::ublas::matrix<float> constants = boost::numeric::ublas::prod(astar, y_vector);
+    la::Matrix<float> constants = la::prod(astar, y_vector);
 
     std::cout << constants << std::endl;
 
@@ -540,7 +541,7 @@ TEST_F(EnsembleTests, SVDLinearDecompositionTest){
     files.emplace_back(fixture(bsa_md_1_700.pdb)); // 10
 
     std::vector<float> ratios = {0.17, 0.23, 0.53, 0.07};
-    boost::numeric::ublas::matrix<float> factors(4,1);
+    la::Matrix<float> factors(4,1);
     factors(0,0) = 0.17;
     factors(1,0) = 0.23;
     factors(2,0) = 0.53;
@@ -563,7 +564,7 @@ TEST_F(EnsembleTests, SVDLinearDecompositionTest){
 
     unsigned lmax = (unsigned int)((maxq*91)/SIMDE_MATH_PI) + 1;
 
-    boost::numeric::ublas::matrix<float> models(totalInWorkingSet,files.size());
+    la::Matrix<float> models(totalInWorkingSet,files.size());
 
     Ensemble ens = Ensemble(files, test_dir());
 
@@ -623,25 +624,25 @@ TEST_F(EnsembleTests, SVDLinearDecompositionTest){
 
 
 
-    boost::numeric::ublas::matrix<float>i_obs_syn = boost::numeric::ublas::prod(models, factors);
+    la::Matrix<float>i_obs_syn = la::prod(models, factors);
 
     // perform SVD and pseudoinverse
-    boost::numeric::ublas::matrix<float> um;
-    boost::numeric::ublas::matrix<float> sm;
-    boost::numeric::ublas::matrix<float> vm;
-    boost::numeric::ublas::matrix<float> astar;
+    la::Matrix<float> um;
+    la::Matrix<float> sm;
+    la::Matrix<float> vm;
+    la::Matrix<float> astar;
 
     //The models matrix will be modified in the SVD by Househoulder transformation
-//    boost::numeric::ublas::matrix<float> ori(models);
+//    la::Matrix<float> ori(models);
 
     ens.svd(models, um, sm, vm);
     unsigned int limitSm = (lmax < models.size2()) ? lmax : models.size2();
     ens.pseudo_inverse(limitSm, astar, um, sm, vm);
 
     // multiple obs vector by pseudo inverse
-    boost::numeric::ublas::matrix<float> constants = boost::numeric::ublas::prod(astar, i_obs_syn);
+    la::Matrix<float> constants = la::prod(astar, i_obs_syn);
 
-//    boost::numeric::ublas::matrix<float> calc = boost::numeric::ublas::prod(ori, constants);
+//    la::Matrix<float> calc = la::prod(ori, constants);
 //    float rsum = 0;
 //
 //    for(unsigned int i=0; i<models.size1(); i++){
@@ -668,7 +669,7 @@ TEST_F(EnsembleTests, NNLSLinearDecompositionTest){
     files.emplace_back(fixture(bsa_md_1_700.pdb)); // 10
 
     std::vector<float> ratios = {0.17, 0.23, 0.53, 0.07};
-    boost::numeric::ublas::matrix<float> factors(4,1);
+    la::Matrix<float> factors(4,1);
     factors(0,0) = ratios[0];
     factors(1,0) = ratios[1];
     factors(2,0) = ratios[2];
@@ -813,7 +814,7 @@ TEST_F(EnsembleTests, NNLSLinearDecompositionWithNoiseTest){
 //    files.emplace_back(fixture(bsa_md_1_700.pdb)); // 10
 
     std::vector<float> ratios = {0.17, 0.23, 0.53, 0.07};
-    boost::numeric::ublas::matrix<float> factors(files.size(),1);
+    la::Matrix<float> factors(files.size(),1);
     factors(0,0) = 0.17;
     factors(1,0) = 0.23;
     factors(2,0) = 0.53;
@@ -890,7 +891,7 @@ TEST_F(EnsembleTests, NNLSLinearDecompositionWithNoiseTest){
         }
     }
 
-    boost::numeric::ublas::matrix<float> y_vector(totalInWorkingSet, 1);
+    la::Matrix<float> y_vector(totalInWorkingSet, 1);
     addNoise(totalInWorkingSet, 1.0, i_obs, i_obs_over_variance, workingSet, y_vector);
 
     nsNNLS::vector y_vectorNNLS(totalInWorkingSet);
@@ -926,12 +927,12 @@ TEST_F(EnsembleTests, NNLSLinearDecompositionWithNoiseTest){
 
 TEST_F(EnsembleTests, SVDTest){
 
-    boost::numeric::ublas::matrix<float> um;
-    boost::numeric::ublas::matrix<float> sm;
-    boost::numeric::ublas::matrix<float> vm;
+    la::Matrix<float> um;
+    la::Matrix<float> sm;
+    la::Matrix<float> vm;
 
     // m > n for Householder
-//    boost::numeric::ublas::matrix<float> exam(4,2);
+//    la::Matrix<float> exam(4,2);
 //    exam(0,0)=2.0f;
 //    exam(0,1)=4.0f;
 //    exam(1,0)=1.0f;
@@ -945,7 +946,7 @@ TEST_F(EnsembleTests, SVDTest){
     // 3 -1
     // 1  3
     // 1  1
-    boost::numeric::ublas::matrix<float> exam(3,2);
+    la::Matrix<float> exam(3,2);
     exam(0,0)=3.0f;
     exam(1,0)=1.0f;
     exam(2,0)=1.0f;
@@ -967,7 +968,7 @@ TEST_F(EnsembleTests, SVDTest){
     std::cout << um << std::endl; // U-matrix
     std::cout << sm << std::endl; // singular values
     std::cout << vm << std::endl; // V-matrix (needs to be transposed)
-    //boost::numeric::ublas::trans(vm);
+    //la::trans(vm);
     ASSERT_NEAR(3.16228, sm(0,0), 0.00001);
     ASSERT_NEAR(3.4641, sm(1,1), 0.0001);
 }
@@ -1004,7 +1005,7 @@ TEST_F(EnsembleTests, CombinationTestsExceptionTest){
 
     Ensemble ens = Ensemble(files, test_dir());
 
-    boost::numeric::ublas::matrix<float> models(totalInWorkingSet,files.size());
+    la::Matrix<float> models(totalInWorkingSet,files.size());
 
     unsigned int mdl_cnt=0;
 
@@ -1071,7 +1072,7 @@ TEST_F(EnsembleTests, CombinationTestsExceptionTest){
 //    }
 
     std::vector<float> inv_variance(totalInWorkingSet);
-    boost::numeric::ublas::matrix<float> i_obs(totalInWorkingSet,1);
+    la::Matrix<float> i_obs(totalInWorkingSet,1);
 
     for(unsigned int q =0; q < totalInWorkingSet; q++) {
         const Datum *pW = &workingSet[q];

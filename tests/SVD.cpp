@@ -32,7 +32,7 @@ public:
 };
 
 TEST_F(SVDTests, determinantTest) {
-    boost::numeric::ublas::matrix<float> a_matrix(3,3);
+    la::Matrix<float> a_matrix(3,3);
     a_matrix(0,0) = 2;
     a_matrix(0,1) = -3;
     a_matrix(0,2) = 1;
